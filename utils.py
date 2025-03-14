@@ -71,10 +71,20 @@ def onehot_encode(y, size):
 def onehot_decode(y):
     return np.argmax(y)
 
-def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1):
+def create_batches(data, batch_size):
+    n = data.shape[0]
+    if n % batch_size != 0:
+        raise Exception("Number of samples is not divisible by batch size")
+    m = n // batch_size
+    batches = np.vsplit(data, m)
+    return np.array(batches)
+
+def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1, batch_size=50):
+    x_train_batches = create_batches(x_train, batch_size)
+    y_train_batches = create_batches(y_train, batch_size)
     for epoch in range(number_epochs):
         error = 0
-        for x, y in zip(x_train, y_train):
+        for x, y in zip(x_train_batches, y_train_batches):
             pred = model.forward(x)
             loss, grad = model.loss(pred, y)
             error += loss

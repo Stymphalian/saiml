@@ -36,14 +36,16 @@ class DenseLayer(Layer):
 
     def forward(self, context, X):
         context["input"] = X
-        a = np.dot(self.W, X)
-        return a + self.b
+        z = np.matmul(self.W, X)
+        z += self.b
+        return z
         
     def backward(self, context, dE):        
         X = context["input"]
-        self.dW = np.dot(dE, X.T)
-        self.db = dE
-        dEdx = np.dot(self.W.T, dE)
+        self.dW = np.array([np.dot(a, b.T) for a,b in zip(dE, X)])
+        self.dW = np.mean(self.dW, axis=0)
+        self.db = np.mean(dE, axis=0)
+        dEdx = np.array([np.dot(self.W.T, e) for e in dE])
 
         learning_rate = context["learning_rate"]
         self.W = self.W - learning_rate * self.dW
@@ -73,8 +75,9 @@ class ActivationLayer(Layer):
         return y
         
     def backward(self, context, dE):
-        self.db = dE * self.fn_derivative(context["input"])
-        return self.db
+        grad = np.multiply(dE, self.fn_derivative(context["input"]))
+        self.db = np.mean(grad, axis=0)
+        return grad
 
 class SigmoidLayer(ActivationLayer):
     def __init__(self, size):
@@ -105,8 +108,9 @@ class SoftmaxLayer(Layer):
         # This version is faster than the one presented in the video
         input = context["input"]
         dydx = softmax_derivative(input)
-        self.db = np.dot(dydx.T, dE)
-        return self.db
+        grad = np.array([np.dot(a.T,b) for a,b in zip(dydx, dE)])
+        self.db = np.mean(grad, axis=0)
+        return grad
     
         # TODO: Why does this not work?
         # input = context["input"]

@@ -116,10 +116,11 @@ def preprocess_data(x, y, limit):
     x = x.astype("float32") / 255
     # encode output which is a number in range [0,9] into a vector of size 10
     # e.g. number 3 will become [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+
     new_y = []
     for index in y:
         new_y.append(utils.onehot_encode(index, 10))
-    y = new_y
+    y = np.array(new_y)
     return x[:limit], y[:limit]
 
 
@@ -141,6 +142,11 @@ def main2():
 
     model = Model()
     utils.train(model, x_train, y_train, number_epochs=100, learning_rate=0.01)
+
+    # grads, diff = model.gradientCheck(x_train[:5], y_train[:5])
+    # pprint(grads)
+    # pprint(diff)
+    # 2.051177863180922e-08
     return
 
 import numba as nb
@@ -152,6 +158,7 @@ import sklearn
 import pca
 
 def main():
+    main2()
     pass
     
 
