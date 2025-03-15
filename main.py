@@ -1,20 +1,23 @@
 import numpy as np
 import os
 
-# import sklearn.decomposition
-
 import utils
-from layer import *
+from layers import *
 from loss import *
 from mnist import MnistDataloader
 
 class Model:
     def __init__(self):
         self.layers = [
-            DenseLayer(784, 784),
-            SigmoidLayer(784),
-            DenseLayer(784, 10),
-            SoftmaxLayer(10)
+            Conv2DLayer((28,28,1), num_kernels=8, kernel_size=5),
+            FlattenLayer(),
+            DenseLayer(4608, 10, frozen=True),
+            SoftmaxLayer(10, frozen=True),
+            # FlattenLayer(),
+            # DenseLayer(784, 784),
+            # SigmoidLayer(784),
+            # DenseLayer(784, 10),
+            # SoftmaxLayer(10)
         ]
         self.contexts = []
         self.gradients = []
@@ -112,19 +115,18 @@ class Model:
 def preprocess_data(x, y, limit):
     # reshape and normalize input data
     x = np.array(x)
-    x = x.reshape(x.shape[0], 28 * 28, 1)
+    # x = x.reshape(x.shape[0], 28 * 28, 1)
     x = x.astype("float32") / 255
+
     # encode output which is a number in range [0,9] into a vector of size 10
     # e.g. number 3 will become [0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
-
     new_y = []
     for index in y:
         new_y.append(utils.onehot_encode(index, 10))
     y = np.array(new_y)
     return x[:limit], y[:limit]
 
-
-def main2():
+def main():
     input_path = 'data'
     training_images_filepath = os.path.join(input_path, 'train-images-idx3-ubyte/train-images-idx3-ubyte')
     training_labels_filepath = os.path.join(input_path, 'train-labels-idx1-ubyte/train-labels-idx1-ubyte')
@@ -137,30 +139,52 @@ def main2():
         test_images_filepath,
         test_labels_filepath)
     (x_train, y_train), (x_test, y_test) = mnist_dataloader.load_data()
-    x_train, y_train = preprocess_data(x_train, y_train, 1000)
-    x_test, y_test = preprocess_data(x_test, y_test, 1000)
+    x_train, y_train = preprocess_data(x_train, y_train, 5)
+    x_test, y_test = preprocess_data(x_test, y_test, 5)
 
+    # x_train = np.array([
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    #     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    # ], dtype=np.float64)
+
+    x_train = np.reshape(x_train, (-1, 28, 28, 1))    
+
+    np.random.seed(1)
     model = Model()
-    utils.train(model, x_train, y_train, number_epochs=100, learning_rate=0.01)
+    output = model.forward(x_train)
+    print(output.shape)
 
-    # grads, diff = model.gradientCheck(x_train[:5], y_train[:5])
+    # grads, diff = model.gradientCheck(x_train, y_train)
     # pprint(grads)
     # pprint(diff)
-    # 2.051177863180922e-08
+    ## 2.051177863180922e-08
     return
-
-import numba as nb
-import numpy as np
-import time
-from pprint import pprint
-from matplotlib import pyplot as plt
-import sklearn
-import pca
-
-def main():
-    main2()
-    pass
-    
 
 if __name__ == "__main__":
     main()

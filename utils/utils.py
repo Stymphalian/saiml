@@ -14,7 +14,7 @@ def numericalGradientCheck(fn, parameters: np.array, predictedGradient, h=1e-7):
         parameters[i][0] = oldX - h
         x2 = fn(parameters)
         parameters[i][0] = oldX
-        numericGradient[i] = (x1 - x2) / (2*h)
+        numericGradient[i][0] = (x1 - x2) / (2*h)
 
     numerator = np.linalg.norm(numericGradient - predictedGradient)
     denominator = np.linalg.norm(numericGradient) + np.linalg.norm(predictedGradient)
@@ -79,6 +79,7 @@ def create_batches(data, batch_size):
     batches = np.vsplit(data, m)
     return np.array(batches)
 
+
 def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1, batch_size=50):
     x_train_batches = create_batches(x_train, batch_size)
     y_train_batches = create_batches(y_train, batch_size)
@@ -92,4 +93,3 @@ def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1, batch_siz
 
         error /= len(x_train)
         print(f"Epoch {epoch+1}/{number_epochs} - Error: {error}")
-    

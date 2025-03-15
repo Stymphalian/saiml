@@ -1,56 +1,6 @@
 import numpy as np
-
+from .layer import *
 from loss import *
-
-class Layer:
-    def __init__(self):
-        pass
-    def getParameters(self):
-        return []
-    def setParameters(self, parameters):
-        return
-    def getGradients(self):
-        return []
-    def forward(self, context, X):
-        pass
-    def backward(self, context, dE):
-        pass
-
-class DenseLayer(Layer):
-    def __init__(self, input_size, output_size):
-        super().__init__()
-        self.input_size = input_size
-        self.output_size = output_size
-        self.W = np.random.normal(size=(output_size, input_size))
-        self.b = np.random.normal(size=(output_size,1))
-        self.dW = np.zeros((output_size, input_size))
-        self.db = np.zeros((output_size, 1))
-
-    def getParameters(self):
-        return [self.W, self.b]
-    def getGradients(self):
-        return [self.dW, self.db]
-    def setParameters(self, parameters):
-        self.W = parameters[0]
-        self.b = parameters[1]
-
-    def forward(self, context, X):
-        context["input"] = X
-        z = np.matmul(self.W, X)
-        z += self.b
-        return z
-        
-    def backward(self, context, dE):        
-        X = context["input"]
-        self.dW = np.array([np.dot(a, b.T) for a,b in zip(dE, X)])
-        self.dW = np.mean(self.dW, axis=0)
-        self.db = np.mean(dE, axis=0)
-        dEdx = np.array([np.dot(self.W.T, e) for e in dE])
-
-        learning_rate = context["learning_rate"]
-        self.W = self.W - learning_rate * self.dW
-        self.b = self.b - learning_rate * self.db
-        return dEdx
 
 class ActivationLayer(Layer):
     def __init__(self, output_size, fn, fn_derivative):
@@ -85,17 +35,23 @@ class SigmoidLayer(ActivationLayer):
         self.size = size
     
 class SoftmaxLayer(Layer):
-    def __init__(self, size):
-        super().__init__()
+    def __init__(self, size, **kwargs):
+        super().__init__(**kwargs)
         self.size = size
         self.b = np.zeros((size, 1), dtype=np.float64)
         self.db = np.zeros((size, 1), dtype=np.float64)
 
     def getParameters(self):
+        if self.frozen:
+            return []
         return [self.b]
     def getGradients(self):
+        if self.frozen:
+            return []
         return [self.db]
     def setParameters(self, parameters):
+        if self.frozen:
+            return
         self.b = parameters[0]
 
     def forward(self, context, X):
@@ -125,3 +81,4 @@ class SoftmaxLayer(Layer):
         # tmp = np.tile(output, n)
         # self.db = np.dot(tmp * (np.identity(n) - np.transpose(tmp)), dE)
         # return self.db
+
