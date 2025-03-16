@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import utils
-from layer import FlattenLayer, Conv2DLayer, Conv2DLayerReference, DenseLayer, ActivationLayer, SoftmaxLayer
+from .conv2d import *
 
 class TestConvs(unittest.TestCase):
 
@@ -25,9 +25,9 @@ class TestConvs(unittest.TestCase):
             [[0,0,0],[0,0,0],[0,0,0]],
             [[1,1,1],[1,1,1],[1,1,1]],
         ])
-        self.conv2DLayer = layer
+        self.conv2dLayer = layer
 
-    def test_flatten_forward(self):
+    def test_flatten(self):
         flatten_layer = FlattenLayer()
         context = {}
         X = np.random.rand(2, 1, 3, 3)  # Example input
@@ -66,7 +66,7 @@ class TestConvs(unittest.TestCase):
         # assert(np.array_equal(Y1, Y2))
 
     def test_conv2d_forward(self):
-        layer = self.conv2DLayer
+        layer = self.conv2dLayer
 
         got_shape = layer.get_output_shape()
         want_shape = (2, 3, 3)
@@ -105,36 +105,98 @@ class TestConvs(unittest.TestCase):
         #     print(want[batch, :, :, :])
         self.assertTrue(np.array_equal(Y, want))
 
-    # def test_conv2d_backward(self):
-    #     layer = self.conv2DLayer
+    def test_conv2d_backward(self):
+        layer = self.conv2dLayer
 
-    #     context = {}
-    #     X = np.arange(2*2*5*5).reshape(2,2,5,5) + 1 # Example input
-    #     Y = layer.forward(context, X)
-    #     dEdY = np.ones(Y.shape) * 0.25
-    #     context["learning_rate"] = 0.01
-    #     dEdX = layer.backward(context, dEdY)
+        context = {}
+        X = np.arange(2*2*5*5).reshape(2,2,5,5) + 1 # Example input
+        Y = layer.forward(context, X)
+        dEdY = np.ones(Y.shape) * 0.25
+        context["learning_rate"] = 0.01
+        dEdX = layer.backward(context, dEdY)
 
-    #     self.assertTrue(dEdX.shape, X.shape)
-        # Add more specific assertions about the output
+        self.assertTrue(dEdX.shape, X.shape)
 
-    # def test_dense_forward(self):
-    #     context = {}
-    #     X = np.random.rand(10, 2)  # Example input
-    #     output = self.dense_layer.forward(context, X)
-    #     self.assertEqual(output.shape, (5, 2))
+    def test_conv2d_forward_with_stride_and_padding(self):
+        layer = Conv2DLayer(
+            input_shape=(1,5,5),
+            num_kernels=1,
+            kernel_size=3,
+            stride=2,
+            padding=1
+        )
+        layer.W = np.array([[[
+            [0,1,0],
+            [1,2,1],
+            [0,1,0]
+        ]]])
+        layer.b = np.array([[[0]]])
+        np.random.seed(1)
+        X = np.array([[[
+            [1,2,3,4,5],
+            [6,5,4,3,2],
+            [2,3,4,5,6],
+            [7,6,5,4,3],
+            [3,4,5,6,7]
+        ]]])
 
-    # def test_activation_forward(self):
-    #     context = {}
-    #     X = np.random.rand(5, 2)  # Example input
-    #     output = self.activation_layer.forward(context, X)
-    #     self.assertEqual(output.shape, X.shape)  # Should be same shape
+        context = {
+            "learning_rate": 0.01
+        }
+        pred = layer.forward(context, X)
+        want_pred = np.array([[[
+            [10,16,16],
+            [20,25,22],
+            [17,25,23],
+        ]]])
+        self.assertEquals(pred.shape, (1,1,3,3))
+        self.assertTrue(np.array_equal(pred, want_pred))
 
-    # def test_softmax_forward(self):
-    #     context = {}
-    #     X = np.random.rand(5, 2)  # Example input
-    #     output = self.softmax_layer.forward(context, X)
-    #     self.assertEqual(output.shape, X.shape)  # Should be same shape
+        dEdY = np.array([[
+            [
+                [0.1,0.2,0.3],
+                [0.4,0.5,0.4],
+                [0.3,0.2,0.1],
+            ]
+        ]])
+        self.assertEquals(dEdY.shape, (1,1,3,3))
+        dEdX = layer.backward(context, dEdY)
+        self.assertEquals(dEdX.shape, X.shape)
+
+        
+        want_dEdW = np.array([[[
+            [5.3,8.6,6.1],
+            [6.5,10,7.1],
+            [6.5,8.5,5.5]
+        ]]])
+        want_dEdb = np.array([[
+            [np.sum(dEdY)]
+        ]])
+        want_dEdX = np.array([[[
+            [0.2, 0.3, 0.4, 0.5, 0.6],
+            [0.5, 0.0, 0.7, 0.0, 0.7],
+            [0.8, 0.9, 1.0, 0.9, 0.8],
+            [0.7, 0.0, 0.7, 0.0, 0.5],
+            [0.6, 0.5, 0.4, 0.3, 0.2]
+        ]]])
+
+        # print('dW')
+        # print(layer.dW)
+        # print(want_dEdW)
+        self.assertEquals(layer.dW.shape, want_dEdW.shape)
+        self.assertTrue(np.allclose(layer.dW, want_dEdW))
+
+        # print('db')
+        # print(layer.db)
+        # print(want_dEdb)
+        self.assertEquals(layer.db.shape, want_dEdb.shape)
+        self.assertTrue(np.array_equal(layer.db, want_dEdb))
+
+        # print('dEdX')
+        # print(dEdX)
+        # print(want_dEdX)
+        self.assertEquals(dEdX.shape, want_dEdX.shape)
+        self.assertTrue(np.allclose(dEdX, want_dEdX))
 
 if __name__ == '__main__':
     unittest.main()

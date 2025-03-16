@@ -1,5 +1,6 @@
 import numpy as np
 import os
+from pprint import pprint
 
 import utils
 from layers import *
@@ -9,9 +10,10 @@ from mnist import MnistDataloader
 class Model:
     def __init__(self):
         self.layers = [
-            Conv2DLayer((28,28,1), num_kernels=8, kernel_size=5),
+            Conv2DLayer((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=2),
+            # Conv2DLayerReference((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=0),
             FlattenLayer(),
-            DenseLayer(4608, 10, frozen=True),
+            DenseLayer(6272, 10, frozen=True),
             SoftmaxLayer(10, frozen=True),
             # FlattenLayer(),
             # DenseLayer(784, 784),
@@ -173,16 +175,16 @@ def main():
     #     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     # ], dtype=np.float64)
 
-    x_train = np.reshape(x_train, (-1, 28, 28, 1))    
+    x_train = np.reshape(x_train, (-1, 1, 28, 28))    
 
     np.random.seed(1)
     model = Model()
     output = model.forward(x_train)
     print(output.shape)
 
-    # grads, diff = model.gradientCheck(x_train, y_train)
-    # pprint(grads)
-    # pprint(diff)
+    grads, diff = model.gradientCheck(x_train[:1], y_train[:1])
+    pprint(grads)
+    pprint(diff)
     ## 2.051177863180922e-08
     return
 

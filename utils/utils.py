@@ -79,6 +79,52 @@ def create_batches(data, batch_size):
     batches = np.vsplit(data, m)
     return np.array(batches)
 
+def zero_dilate(X, space):
+    """
+    X is 2d array of shape (height, width)
+    Add zeros between each pixel of the 2d array.
+    for example:
+    123           10203
+    456  becomes  00000
+    789           40506
+                  00000
+                  70809
+    """
+    if space == 0:
+        return X
+    height, width = X.shape
+    new_height = height + (height-1)*space
+    new_width = width + (width-1)*space
+    Y = np.zeros((new_height, new_width))
+    for row in range(height):
+        new_row = row + row*space
+        for col in range(width):
+            new_col = col + col*space
+            Y[new_row, new_col] = X[row, col]
+    return Y
+
+def zero_pad(X, pad):
+    """
+    Pad with zeros all images of the dataset X. 
+    The padding is applied to the height and width of an image, 
+    as illustrated in Figure 1.
+    
+    Argument:
+    X -- python numpy array of shape (m, n_C, n_H, n_W) representing a batch of m images
+    pad -- integer, amount of padding around each image on vertical and horizontal dimensions
+    
+    Returns:
+    X_pad -- padded image of shape (m, n_C, n_H + 2*pad, n_W + 2*pad)
+    """
+    if pad == 0:
+        return X
+    
+    ### START CODE HERE ### (≈ 1 line)
+    X_pad = np.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad)), 'constant', constant_values = (0,0))
+    ### END CODE HERE ###
+    
+    return X_pad
+
 
 def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1, batch_size=50):
     x_train_batches = create_batches(x_train, batch_size)

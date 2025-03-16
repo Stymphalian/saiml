@@ -15,33 +15,33 @@ class FlattenLayer(Layer):
         return np.reshape(dE, X_shape)
 
 class Conv2DLayer(Layer):
-    def __init__(self, input_shape, num_kernels=1, kernel_size=3, stride=1):
+    def __init__(self, input_shape, num_kernels=1, kernel_size=3, stride=1, padding=0):
         super().__init__()
         # input_shape = (channels, height, width)
-        self.input_height = input_shape[0]
-        self.input_width = input_shape[1]
-        self.input_channels = input_shape[2]
+        self.input_channels = input_shape[0]
+        self.input_height = input_shape[1]
+        self.input_width = input_shape[2]
         self.num_kernels = num_kernels
         self.kernel_size = kernel_size
         self.stride = stride
+        self.padding = padding
 
         output_shape = self.get_output_shape()
-        self.output_height = output_shape[0]
-        self.output_width = output_shape[1]
-        self.output_channels = output_shape[2]
-    
+        self.output_channels = output_shape[0]
+        self.output_height = output_shape[1]
+        self.output_width = output_shape[2]
+        
         # kernels, and biases
-        self.W = np.random.normal(size=(kernel_size, kernel_size, self.input_channels, num_kernels))
-        # self.b = np.random.normal(size=(self.output_height, self.output_width, self.output_channels))
-        self.b = np.random.normal(size=(1,1,self.num_kernels))
+        self.W = np.random.normal(size=(num_kernels, self.input_channels, kernel_size, kernel_size))
+        self.b = np.random.normal(size=(self.num_kernels,1,1))
         self.dW = np.zeros(self.W.shape, dtype=np.float64)
         self.db = np.zeros(self.b.shape, dtype=np.float64)
 
     def get_output_shape(self):
         depth = self.num_kernels
-        height = (self.input_height - self.kernel_size) // self.stride + 1
-        width = (self.input_width - self.kernel_size) // self.stride + 1
-        return (height, width, depth)
+        height = (self.input_height - self.kernel_size + 2*self.padding) // self.stride + 1
+        width = (self.input_width - self.kernel_size + 2*self.padding) // self.stride + 1
+        return (depth, height, width)
 
     def getParameters(self):
         return [self.W, self.b]
@@ -53,44 +53,42 @@ class Conv2DLayer(Layer):
 
     def forward(self, context, X):
         context["input"] = X
-        # X = (batches, height, width, channels)
+        # X = (batches, channels, height, width)
         batches, _, _, _ = X.shape
         
-        output_shape = (batches, self.output_height, self.output_width, self.output_channels)
+        output_shape = (batches, self.output_channels, self.output_height, self.output_width)
         output = np.zeros(output_shape, dtype=np.float64)
+        padX = utils.zero_pad(X, self.padding)
+        
         for batch in range(batches):    
             for k in range(self.num_kernels):
                 for c in range(self.input_channels):
-                    output[batch,:,:,k] += utils.convolve2D(X[batch,:,:,c], self.W[:,:,c,k])
-                output[batch,:,:,k] += self.b[:,:,k]
+                    output[batch,k] += utils.convolve2D(padX[batch,c], self.W[k,c], stride=self.stride)
+                output[batch,k] += self.b[k]
         return output
 
     def backward(self, context, dEdY):
         X = context["input"]
         batches = X.shape[0]
-        # X.shape == (batches, height, width, channels)
-        # W.shape = (kernel_size, kernel_size, channels, num_kernels)
-        # b.shape = (1, 1, num_kernels)
-        #  y.shape == (batches, new_height, new_width, num_kernels)
-        # dEdX.shape == (batches, height, width, channels)
-        # dW.shape = (kernel_size, kernel_size, channels, num_kernels)
-        # db.shape = (1, 1, num_kernels)
-        # dEdY.shape == (batches, new_height, new_width, num_kernels)
-
+        
         dW = np.zeros(self.W.shape, dtype=np.float64)
         db = np.zeros(self.b.shape, dtype=np.float64)
         dEdx = np.zeros(X.shape, dtype=np.float64)
+        padX = utils.zero_pad(X, self.padding)
+        pad = self.padding
 
         for batch in range(batches):
             for k in range(self.num_kernels):
                 for c in range(self.input_channels):
-                    tempdW = utils.convolve2D(X[batch,:,:,c], dEdY[batch, :, :, k])
-                    tempdEdX = utils.full_convolve2D(dEdY[batch, :, :, k], self.W[:,:,c,k])
-                    dW[:, :, c, k] += tempdW
-                    dEdx[batch, :, :, c] += tempdEdX
-                db[:,:,k] += np.sum(dEdY[batch, :, :, k])
-        # self.dW /= batches
-        # self.db /= batches
+                    dEdY_dilate = utils.zero_dilate(dEdY[batch,k], self.stride-1)
+                    tempdW = utils.convolve2D(padX[batch,c], dEdY_dilate)
+                    tempdEdX = utils.full_convolve2D(dEdY[batch, k], self.W[k,c], stride=self.stride)
+                    if self.padding > 0:
+                        tempdEdX = tempdEdX[pad:-pad, pad:-pad]
+                    
+                    dW[k,c] += tempdW
+                    dEdx[batch, c] += tempdEdX
+                db[k] += np.sum(dEdY[batch, k])
 
         self.dW = dW
         self.db = db
@@ -199,31 +197,32 @@ class Conv2DLayerHardCode(Layer):
         return self.dEdx
     
 class Conv2DLayerReference(Layer):
-    def __init__(self, input_shape, num_kernels=1, kernel_size=3, stride=1):
+    def __init__(self, input_shape, num_kernels=1, kernel_size=3, stride=1, padding=0):
         super().__init__()
-        # input_shape = (channels, height, width)
+        # input_shape = (channels, height, width,)
         
-        self.input_height = input_shape[0]
-        self.input_width = input_shape[1]
-        self.input_channels = input_shape[2]
+        self.input_channels = input_shape[0]
+        self.input_height = input_shape[1]
+        self.input_width = input_shape[2]
         self.num_kernels = num_kernels
         self.kernel_size = kernel_size
         self.stride = stride
-        self.W = np.random.normal(size=(kernel_size, kernel_size, self.input_channels, num_kernels))
-        self.b = np.random.normal(size=(1,1,1,num_kernels))
+        self.padding = padding
+        self.W = np.random.normal(size=(num_kernels, self.input_channels, kernel_size, kernel_size))
+        self.b = np.random.normal(size=(num_kernels,1,1,1))
         self.dW = np.zeros(self.W.shape, dtype=np.float64)
         self.db = np.zeros(self.b.shape, dtype=np.float64)
 
     def getParameters(self):
-        return [self.W.copy(), self.b.copy()]
+        return [self.W, self.b]
     def getGradients(self):
-        return [self.dW.copy(), self.db.copy()]
+        return [self.dW, self.db]
     def setParameters(self, parameters):
         self.W = parameters[0]
         self.b = parameters[1]
 
     def forward(self, context, X):
-        hparameters = {"pad" : 0, "stride": 1}
+        hparameters = {"pad" : self.padding, "stride": self.stride}
         z, cache = utils.conv_forward(X, self.W, self.b, hparameters)
         context["cache"] = cache
         return z

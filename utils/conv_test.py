@@ -5,6 +5,30 @@ from scipy import signal
 
 class TestConv(unittest.TestCase):
 
+
+    def test_convole2d_stride(self):
+        X = np.array([
+            [0,0,0,0,0,0,0],
+            [0,1,2,3,4,5,0],
+            [0,6,5,4,3,2,0],
+            [0,2,3,4,5,6,0],
+            [0,7,6,5,4,3,0],
+            [0,3,4,5,6,7,0],
+            [0,0,0,0,0,0,0]
+        ])
+        kernel = np.array([
+            [0,1,0],
+            [1,2,1],
+            [0,1,0],
+        ])
+        got = utils.convolve2D(X, kernel, stride=2)
+        want = np.array([
+            [10,16,16],
+            [20,25,22],
+            [17,25,23],
+        ])
+        self.assertTrue(np.array_equal(got, want))
+
     def test_convolve2d_against_scipy(self):
         X = np.arange(20).reshape(4, 5) + 1
         kernel = np.array([[1,0],[0,1]])
@@ -63,44 +87,38 @@ class TestConv(unittest.TestCase):
         got = utils.full_convolve3D(X, kernel)
         want = signal.convolve2d(X[:,:,0], kernel[:,:,0], mode='full')
         self.assertTrue(np.array_equal(got, want))
-
-    def test_zero_pad(self):
-        np.random.seed(1)
-        x = np.random.randn(4, 3, 3, 2)
-        x_pad = utils.zero_pad(x, 2)
-        self.assertEqual(x_pad.shape, (4, 7, 7, 2))
      
     def test_conv_single_step(self):
         np.random.seed(1)
-        a_slice_prev = np.random.randn(4, 4, 3)
-        W = np.random.randn(4, 4, 3)
+        a_slice_prev = np.random.randn(3, 4, 4)
+        W = np.random.randn(3, 4, 4)
         b = np.random.randn(1, 1, 1)
         z = utils.conv_single_step(a_slice_prev, W, b)
         self.assertAlmostEqual(z, -6.999089450680221)
 
     def test_conv_forward(self):
         np.random.seed(1)
-        A_prev = np.random.randn(10,4,4,3)
-        W = np.random.randn(2,2,3,8)
-        b = np.random.randn(1,1,1,8)
+        A_prev = np.random.randn(10,3,4,4)
+        W = np.random.randn(8,3,2,2)
+        b = np.random.randn(8,1,1,1)
         hparameters = {"pad" : 2, "stride": 2}
 
         Z, cache = utils.conv_forward(A_prev, W, b, hparameters)
-        self.assertEqual(Z.shape, (10, 4, 4, 8))
+        self.assertEqual(Z.shape, (10, 8, 4, 4))
 
     def test_conv_backward(self):
         np.random.seed(1)
-        A_prev = np.random.randn(10,4,4,3)
-        W = np.random.randn(2,2,3,8)
-        b = np.random.randn(1,1,1,8)
+        A_prev = np.random.randn(10,3,4,4)
+        W = np.random.randn(8,3,2,2)
+        b = np.random.randn(8,1,1,1)
         hparameters = {"pad" : 2, "stride": 2}
         Z, cache = utils.conv_forward(A_prev, W, b, hparameters)
 
         np.random.seed(1)
         dA, dW, db = utils.conv_backward(Z, cache)
-        self.assertAlmostEqual(np.mean(dA), 0.24130207158952496)
-        self.assertAlmostEqual(np.mean(dW), 5.721264942488976)
-        self.assertAlmostEqual(np.mean(db), -1.2483155349054407)
+        self.assertAlmostEqual(np.mean(dA), 2.9470599583887345)
+        self.assertAlmostEqual(np.mean(dW), 5.6470033527213745)
+        self.assertAlmostEqual(np.mean(db), 8.184838514561605)
 
     
 

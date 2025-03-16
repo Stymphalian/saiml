@@ -1,0 +1,7 @@
+TODO:
+* change input shape back to (channel, height, width) instead of (height, width, channel) [x]
+* implement stride and padding in Conv2D [x]
+* vectorized implementation of the Conv2D forward/backward pass
+* implement PoolLayer
+* Better way to specify the list of layers without hardcoding the input_shapes
+* Implement optimizers and Trainer class
