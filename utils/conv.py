@@ -23,7 +23,6 @@ def full_convolve2D(X, kernel, stride=1):
     X.shape == (height, widhth)
     kernel.shape == (height, width)
     """
-
     kh, kw = kernel.shape
     kernel = np.rot90(kernel, 2)
     X = utils.zero_dilate(X, stride-1)

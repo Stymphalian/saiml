@@ -59,13 +59,28 @@ class Conv2DLayer(Layer):
         output_shape = (batches, self.output_channels, self.output_height, self.output_width)
         output = np.zeros(output_shape, dtype=np.float64)
         padX = utils.zero_pad(X, self.padding)
-        
+        kh, kw = (self.kernel_size, self.kernel_size)
+    
         for batch in range(batches):    
             for k in range(self.num_kernels):
                 for c in range(self.input_channels):
-                    output[batch,k] += utils.convolve2D(padX[batch,c], self.W[k,c], stride=self.stride)
+                    for row in range(self.output_height):
+                        for col in range(self.output_width):
+                            h = row * self.stride
+                            w = col * self.stride
+                            
+                            x_slice = padX[batch, c, h:h+kh, w:w+kw]
+                            kernel = self.W[k,c]
+                            output[batch,k,row,col] += np.sum(x_slice * kernel)
                 output[batch,k] += self.b[k]
         return output
+    
+        # for batch in range(batches):    
+        #     for k in range(self.num_kernels):
+        #         for c in range(self.input_channels):
+        #             output[batch,k] += utils.convolve2D(padX[batch,c], self.W[k,c], stride=self.stride)
+        #         output[batch,k] += self.b[k]
+        # return output
 
     def backward(self, context, dEdY):
         X = context["input"]
@@ -73,22 +88,45 @@ class Conv2DLayer(Layer):
         
         dW = np.zeros(self.W.shape, dtype=np.float64)
         db = np.zeros(self.b.shape, dtype=np.float64)
-        dEdx = np.zeros(X.shape, dtype=np.float64)
         padX = utils.zero_pad(X, self.padding)
+        dEdx = np.zeros(padX.shape, dtype=np.float64)
+        kh, kw = (self.kernel_size, self.kernel_size)
         pad = self.padding
 
         for batch in range(batches):
             for k in range(self.num_kernels):
                 for c in range(self.input_channels):
-                    dEdY_dilate = utils.zero_dilate(dEdY[batch,k], self.stride-1)
-                    tempdW = utils.convolve2D(padX[batch,c], dEdY_dilate)
-                    tempdEdX = utils.full_convolve2D(dEdY[batch, k], self.W[k,c], stride=self.stride)
-                    if self.padding > 0:
-                        tempdEdX = tempdEdX[pad:-pad, pad:-pad]
-                    
-                    dW[k,c] += tempdW
-                    dEdx[batch, c] += tempdEdX
+                    for row in range(self.output_height):
+                        for col in range(self.output_width):
+                            h = row * self.stride
+                            w = col * self.stride
+                            x_slice = padX[batch, c, h:h+kh, w:w+kw]
+                            kernel = self.W[k,c]
+                            dY = dEdY[batch, k, row, col]
+
+                            temp_dW = np.multiply(x_slice, dY)
+                            temp_dEdx = np.multiply(kernel, dY)
+                            dEdx[batch,c,h:h+kh,w:w+kw] += temp_dEdx
+                            dW[k,c] += temp_dW
+
                 db[k] += np.sum(dEdY[batch, k])
+        
+        if self.padding > 0:
+            dEdx = dEdx[:, :, pad:-pad, pad:-pad]
+
+        # dEdx = np.zeros(X.shape, dtype=np.float64)
+        # for batch in range(batches):
+        #     for k in range(self.num_kernels):
+        #         for c in range(self.input_channels):
+        #             dEdY_dilate = utils.zero_dilate(dEdY[batch,k], self.stride-1)
+        #             tempdW = utils.convolve2D(padX[batch,c], dEdY_dilate)
+        #             tempdEdX = utils.full_convolve2D(dEdY[batch, k], self.W[k,c], stride=self.stride)
+        #             if self.padding > 0:
+        #                 tempdEdX = tempdEdX[pad:-pad, pad:-pad]
+                    
+        #             dW[k,c] += tempdW
+        #             dEdx[batch, c] += tempdEdX
+        #         db[k] += np.sum(dEdY[batch, k])
 
         self.dW = dW
         self.db = db
