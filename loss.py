@@ -6,6 +6,12 @@ def sigmoid(X):
 def sigmoid_derivative(X):
     return sigmoid(X) * (1 - sigmoid(X))
 
+def relu(x):
+    return (x + np.abs(x)) * 0.5
+
+def relu_derivative(x):
+    return np.zeros(x.shape) + (x > 0)
+
 def softmax_internal(X):
     """Compute the softmax of vector x in a numerically stable way."""
     shiftx = X - np.max(X)

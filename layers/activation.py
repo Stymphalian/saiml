@@ -33,6 +33,11 @@ class SigmoidLayer(ActivationLayer):
     def __init__(self, size):
         super().__init__(size, sigmoid, sigmoid_derivative)
         self.size = size
+
+class ReLULayer(ActivationLayer):
+    def __init__(self, size):
+        super().__init__(size, relu, relu_derivative)
+        self.size = size
     
 class SoftmaxLayer(Layer):
     def __init__(self, size, **kwargs):
