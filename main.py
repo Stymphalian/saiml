@@ -143,12 +143,175 @@ def preprocess_data(x, y, limit):
     return x[:limit], y[:limit]
 
 import autograd2 as ag
-def main():
-    def tanh(x):
-        return x
-    
-    x = ag.Tensor(np.array([1,2,3]))
+from typing import *
 
+def cross_entropy_loss(y_pred, y_true):
+    # return ag.sum(y_pred)
+    y_pred += ag.Tensor(1e-8)
+    return -ag.sum(y_true * ag.log(y_pred))
+
+def softmax(x):
+    shiftx = x - ag.max(x)
+    exps = ag.exp(shiftx)
+    return exps / ag.sum(exps)
+
+class Module:
+    params: List[ag.Tensor]
+    def __init__(self):
+        self.params = []
+    def forward(self, x):
+        """Inference"""
+        pass
+    def backward(self, context):
+        """Run backwards to update the gradients of all the parameters"""
+        pass
+
+    def get_params_grads_size(self):
+        params_size = sum(x.size for x in self.params)
+        grads_size = sum(x.size for x in self.params)
+        return (params_size, grads_size)
+    
+    def get_params_grads(self):
+        params = [x.data.reshape(-1) for x in self.params]
+        grads = [x.grad.reshape(-1) for x in self.params]
+        if len(params) > 0:
+            params = np.concatenate(params)
+        else:
+            params = np.array([])
+        if len(grads) > 0:
+            grads = np.concatenate(grads)
+        else:
+            grads = np.array([])
+        return (params, grads)
+    
+    def set_params(self, params):
+        count = 0
+        for pi in range(len(self.params)):
+            data_size = self.params[pi].size
+            data_shape = self.params[pi].shape
+            data = params[count:count+data_size].reshape(data_shape)
+            self.params[pi].data = data
+            count += self.params[pi].size
+
+class Dense(Module):
+    def __init__(self, input_size, output_size):
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.W = ag.Tensor(np.random.normal(size=(output_size, input_size)), requires_grad=True)
+        self.b = ag.Tensor(np.random.normal(size=(output_size, 1)), requires_grad=True)
+        self.params = [self.W, self.b]
+
+    def forward(self, X):
+        return ag.matmul(self.W, X) + self.b
+
+    def backward(self, context):
+        learning_rate = context["learning_rate"]
+        self.W.data = self.W.data - learning_rate * self.W.grad
+        self.b.data = self.b.data - learning_rate * self.b.grad
+
+class Sigmoid(Module):
+    def forward(self, x):
+        return ag.Tensor(1) / (1.0 + ag.exp(-x))
+
+class Softmax(Module):
+    def forward(self, X):
+        return softmax(X)
+
+class Sequence(Module):
+    def __init__(self, layers):
+        super().__init__()
+        self.layers = layers
+
+    def get_params_grads_size(self):
+        params, grads = self.get_params_grads()
+        return (params.size, grads.size)
+
+    def get_params_grads(self):
+        params = []
+        grads = []
+        for layer in self.layers:
+            p, g = layer.get_params_grads()
+            params.append(p)
+            grads.append(g)
+        params = np.concatenate(params)
+        grads = np.concatenate(grads)
+        return (params, grads)
+
+    def set_params(self, params):
+        count = 0
+        for layer in self.layers:
+            params_size, _ = layer.get_params_grads_size()
+            sub_params = params[count:count+params_size]
+            layer.set_params(sub_params)
+            count += params_size
+
+    def forward(self, X):
+        for layer in self.layers:
+            X = layer.forward(X)
+        return X
+    
+    def backward(self, context):
+        for layer in reversed(self.layers):
+            layer.backward(context)
+    
+def main():
+    x_train = np.array([
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        ], dtype=np.float64)
+    y_train = np.array([1,0,0,0,0,0,0,0,0,0], dtype=np.float64)
+    x_train = ag.Tensor(x_train.reshape(-1, 1))
+    y_train = ag.Tensor(y_train.reshape(10, 1))
+
+    model = Sequence([
+        Dense(784, 10),
+        Sigmoid(),
+        # Dense(784, 784),
+        # Sigmoid(),
+        # Dense(784,10),
+        Softmax()
+    ])
+    x = model.forward(x_train)
+    loss = cross_entropy_loss(x, y_train)
+    loss.backward()
+    params, predGrads = model.get_params_grads()
+    def forward(params):
+        model.set_params(params)
+        pred = model.forward(x_train)
+        loss = cross_entropy_loss(pred, y_train)
+        return loss.value()
+    grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads)
+    print(grad)
+    print(predGrads)
+    print(diffs)
+    print(ag.Node._NODE_AUTO_ID)
 
 
 def main2():

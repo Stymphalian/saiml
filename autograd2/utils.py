@@ -45,18 +45,19 @@ def grad(node: "Tensor"):
     
     for v in toposort(node):
         dy_dv = sum(node_to_grads[v.id])
+        if v.requires_grad:
+            v.grad = dy_dv
         dy_dp = v.gradients(dy_dv)
         for pi, p in enumerate(v.inputs):
-            node_to_grads[p.id].append(dy_dp[pi])
-
-    for v in toposort(node):
-        v.grad = sum(node_to_grads[v.id])
+            node_to_grads[p.id].append(dy_dp[pi])        
     return node_to_grads
 
 
-def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6):    
+def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progress=False):    
     numericGradients = np.zeros(len(params))
     for param in range(len(params)):
+        if print_progress and param % 1000 == 0:
+            print("Param {}/{}".format(param, len(params)))
         saved = params[param]
 
         params[param] += tol

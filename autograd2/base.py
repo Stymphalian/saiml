@@ -16,7 +16,7 @@ class Node:
 class Operator:
     def compute(self, *inputs: Tuple["Tensor"]):
         """
-        Compute the 
+        Compute the value in the forward pass
         """
         raise NotImplementedError
 
@@ -78,20 +78,37 @@ class Tensor(Node):
     
     def __repr__(self):
         return "Tensor(" + str(self.value()) + ")"
-
+    
     def __str__(self):
         return self.value().__str__()
     
+    def __neg__(self):
+        return ag.math_ops.neg(self)
+    
     def __add__(self, other):
-        return ag.operators.add(self, other)
+        if isinstance(other, Tensor):
+            return ag.math_ops.add(self, other)
+        else:
+            return ag.math_ops.add_scalar(self, other)
+    __radd__ = __add__
     
     def __sub__(self, other):
-        return ag.operators.sub(self, other)
+        if isinstance(other, Tensor):
+            return ag.math_ops.sub(self, other)
+        else:
+            return ag.math_ops.sub_scalar(self, other)
 
     def __mul__(self, other):
-        return ag.operators.mult(self, other)
+        if isinstance(other, Tensor):
+            return ag.math_ops.mult(self, other)
+        else:
+            return ag.math_ops.mult_scalar(self, other)
+    __rmul__ = __mul__
     
     def __truediv__(self, other):
-        return ag.operators.div(self, other)
+        if isinstance(other, Tensor):
+            return ag.math_ops.div(self, other)
+        else:
+            return ag.math_ops.div_scalar(self, other)
     
     

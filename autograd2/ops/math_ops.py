@@ -7,12 +7,28 @@ class TensorAdd(Operator):
         return np.add(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
         return (outGrad, outGrad)
+
+class TensorAddScalar(Operator):
+    def __init__(self, scalar):
+        self.scalar = scalar
+    def compute(self, *inputs: Tuple[Tensor]):
+        return inputs[0].value() + self.scalar
+    def gradients(self, node, outGrad):
+        return (outGrad,)
     
 class TensorSub(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.subtract(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
         return (outGrad, -outGrad)
+    
+class TensorSubScalar(Operator):
+    def __init__(self, scalar):
+        self.scalar = scalar
+    def compute(self, *inputs: Tuple[Tensor]):
+        return inputs[0].value() - self.scalar
+    def gradients(self, node, outGrad):
+        return (outGrad,)
         
 class TensorMult(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -32,6 +48,14 @@ class TensorMult(Operator):
 
         return (da, db)
     
+class TensorMultScalar(Operator):
+    def __init__(self, scalar):
+        self.scalar = scalar
+    def compute(self, *inputs: Tuple[Tensor]):
+        return inputs[0].value() * self.scalar
+    def gradients(self, node, outGrad):
+        return (outGrad * self.scalar,)
+    
 class TensorDiv(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.divide(inputs[0].value(), inputs[1].value())
@@ -50,6 +74,14 @@ class TensorDiv(Operator):
         assert db.shape == b.shape
 
         return (da,db)
+    
+class TensorDivScalar(Operator):
+    def __init__(self, scalar):
+        self.scalar = scalar
+    def compute(self, *inputs: Tuple[Tensor]):
+        return inputs[0].value() / self.scalar
+    def gradients(self, node, outGrad):
+        return (outGrad / self.scalar,)
 
 class TensorSin(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -123,17 +155,31 @@ class TensorMax(Operator):
         dx = np.zeros(node.inputs[0].value().shape)
         dx[xi] = 1
         return (outGrad * dx,)
+    
+class TensorNegate(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return -inputs[0].value()
+    def gradients(self, node, outGrad):
+        return (-outGrad,)
 
 def constant(a):
-    return Tensor(a)
+    return Tensor(a, requires_grad=False)
 def add(a, b):
     return TensorAdd().tensor(a,b)
+def add_scalar(a, b):
+    return TensorAddScalar(b).tensor(a)
 def sub(a, b):
     return TensorSub().tensor(a, b)
+def sub_scalar(a, b):
+    return TensorSubScalar(b).tensor(a)
 def mult(a, b):
     return TensorMult().tensor(a, b)
+def mult_scalar(a, b):
+    return TensorMultScalar(b).tensor(a)
 def div(a, b):
     return TensorDiv().tensor(a, b)
+def div_scalar(a, b):
+    return TensorDivScalar(b).tensor(a)
 def matmul(a, b):
     return TensorMatMul().tensor(a, b)
 def sin(a):
@@ -150,6 +196,5 @@ def power(a, power):
     return TensorPower(power).tensor(a)
 def max(a):
     return TensorMax().tensor(a)
-def softmax(x):
-    ex = exp(x)
-    return ex / sum(ex)
+def neg(a):
+    return TensorNegate().tensor(a)
