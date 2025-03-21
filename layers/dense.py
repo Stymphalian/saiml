@@ -7,7 +7,7 @@ class DenseLayer(Layer):
         self.input_size = input_size
         self.output_size = output_size
         self.W = np.random.normal(size=(output_size, input_size))
-        self.b = np.random.normal(size=(output_size,1))
+        self.b = np.random.normal(size=(output_size, 1))
         self.dW = np.zeros((output_size, input_size))
         self.db = np.zeros((output_size, 1))
 

@@ -10,16 +10,23 @@ from mnist import MnistDataloader
 class Model:
     def __init__(self):
         self.layers = [
-            Conv2DLayer((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=2),
-            # Conv2DLayerReference((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=0),
-            FlattenLayer(),
-            DenseLayer(6272, 10, frozen=True),
-            SoftmaxLayer(10, frozen=True),
             # FlattenLayer(),
-            # DenseLayer(784, 784),
+            # DenseLayer(3, 3),
+            # FlattenLayer(),
+            # SoftmaxLayer(3, frozen=True),
+
+            # Conv2DLayer((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=2),
+            # # Conv2DLayerReference((1,28,28), num_kernels=8, kernel_size=5, stride=1, padding=0),
+            # FlattenLayer(),
+            # DenseLayer(6272, 10, frozen=True),
+            # SoftmaxLayer(10, frozen=True),
+            # FlattenLayer(),
+
+            DenseLayer(784, 10),
+            # SigmoidLayer(10),
             # SigmoidLayer(784),
             # DenseLayer(784, 10),
-            # SoftmaxLayer(10)
+            SoftmaxLayer(10, frozen=True)
         ]
         self.contexts = []
         self.gradients = []
@@ -36,8 +43,15 @@ class Model:
     def loss(self, y_pred, y_true):
         # loss = mean_square_error(y_true, y_pred)
         # grads = mean_square_error_derivative(y_true, y_pred)
-        loss = cross_entropy_loss(y_true, y_pred)
-        grads = cross_entropy_loss_derivative(y_true, y_pred)
+        # return (
+        #     np.sum(y_pred.reshape(-1)),
+        #     np.ones(y_pred.shape)
+        # )
+        # loss = cross_entropy_loss(y_true, y_pred)
+        # grads = cross_entropy_loss_derivative(y_true, y_pred)
+
+        loss = mean_square_error(y_true, y_pred)
+        grads = mean_square_error_derivative(y_true, y_pred)
         return loss, grads
 
     def backward(self, gradients):
@@ -128,7 +142,16 @@ def preprocess_data(x, y, limit):
     y = np.array(new_y)
     return x[:limit], y[:limit]
 
+import autograd2 as ag
 def main():
+    def tanh(x):
+        return x
+    
+    x = ag.Tensor(np.array([1,2,3]))
+
+
+
+def main2():
     input_path = 'data'
     training_images_filepath = os.path.join(input_path, 'train-images-idx3-ubyte/train-images-idx3-ubyte')
     training_labels_filepath = os.path.join(input_path, 'train-labels-idx1-ubyte/train-labels-idx1-ubyte')
@@ -175,12 +198,14 @@ def main():
     #     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     # ], dtype=np.float64)
 
-    x_train = np.reshape(x_train, (-1, 1, 28, 28))    
+    x_train = np.reshape(x_train, (-1, 784, 1))
+    # np.random.seed(1)
+    # x_train = np.arange(3, dtype=np.float64).reshape(1,3, 1) + 1
+    # y_train = np.zeros(3, dtype=np.float64).reshape(1,3, 1)
 
-    np.random.seed(1)
     model = Model()
-    output = model.forward(x_train)
-    print(output.shape)
+    # output = model.forward(x_train)
+    # print(output.shape)
 
     grads, diff = model.gradientCheck(x_train[:1], y_train[:1])
     pprint(grads)

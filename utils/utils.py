@@ -17,8 +17,10 @@ def numericalGradientCheck(fn, parameters: np.array, predictedGradient, h=1e-7):
         numericGradient[i][0] = (x1 - x2) / (2*h)
 
     numerator = np.linalg.norm(numericGradient - predictedGradient)
-    denominator = np.linalg.norm(numericGradient) + np.linalg.norm(predictedGradient)
-    diff = numerator / denominator
+    # denominator = np.linalg.norm(numericGradient + predictedGradient)
+    # denominator = np.linalg.norm(numericGradient) + np.linalg.norm(predictedGradient)
+    # diff = numerator / denominator
+    diff = np.sum(numerator)
     return numericGradient, diff
 
 def covariance_matrix(data):
