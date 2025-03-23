@@ -1,5 +1,7 @@
 import numpy as np
 from typing import *
+# from utils.conv import convolve2d, convolve2d_gradient
+from utils import conv
 from ..base import Operator, Tensor
 
 class TensorAdd(Operator):
@@ -101,16 +103,15 @@ class TensorLog(Operator):
     
 class TensorMatMul(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        W = inputs[0].value()
-        X = inputs[1].value()
-        return np.matmul(W, X)
+        X = inputs[0].value()
+        W = inputs[1].value()
+        return np.matmul(X, W)
     def gradients(self, node, outGrad):
-        W = node.inputs[0].value()
-        X = node.inputs[1].value()
-        return (
-            np.dot(outGrad, X.T),
-            np.dot(W.T, outGrad)
-        )
+        X = node.inputs[0].value()
+        W = node.inputs[1].value()
+        dx = np.matmul(outGrad, W.T) 
+        dw = np.matmul(X.T, outGrad) 
+        return (dx, dw)
     
 class TensorSum(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -161,6 +162,56 @@ class TensorNegate(Operator):
         return -inputs[0].value()
     def gradients(self, node, outGrad):
         return (-outGrad,)
+    
+class TensorReshape(Operator):
+    def __init__(self, shape):
+        self.shape = shape
+    def compute(self, *inputs: Tuple[Tensor]):
+        return inputs[0].value().reshape(self.shape)
+    def gradients(self, node, outGrad):
+        return (outGrad.reshape(node.inputs[0].value().shape),)
+    
+class TensorConvolve2D(Operator):
+    def __init__(self, stride, padding, dilate):
+        assert(stride >= 1)
+        assert(padding >= 0)
+        assert(dilate >= 0)
+        self.stride = stride
+        self.padding = padding
+        self.dilate = dilate
+
+    def compute(self, *inputs: Tuple[Tensor]):
+        x = inputs[0].value()
+        kernel = inputs[1].value()
+        return conv.convolve2d(
+            x, kernel, self.stride, self.padding, self.dilate)
+
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        kernel = node.inputs[1].value()
+        return conv.convolve2d_gradient(
+            x, kernel, outGrad, self.stride, self.padding, self.dilate)
+    
+class TensorConvolve2DTranspose(Operator):
+    def __init__(self, stride, padding):
+        assert(stride >= 1)
+        assert(padding >= 0)
+        self.stride = stride
+        self.padding = padding
+
+    def compute(self, *inputs: Tuple[Tensor]):
+        x = inputs[0].value()
+        kernel = inputs[1].value()
+
+        assert(kernel.shape[0] == kernel.shape[1])
+        return conv.convolve2d_transpose(
+            x, kernel, self.stride, self.padding)
+
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        kernel = node.inputs[1].value()
+        return conv.convolve2d_transpose_gradient(
+            x, kernel, outGrad, self.stride, self.padding)
 
 def constant(a):
     return Tensor(a, requires_grad=False)
@@ -198,3 +249,9 @@ def max(a):
     return TensorMax().tensor(a)
 def neg(a):
     return TensorNegate().tensor(a)
+def reshape(a, shape):
+    return TensorReshape(shape).tensor(a)
+def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
+    return TensorConvolve2D(stride, padding, dilate).tensor(x, kernel)
+def convolve2d_transpose(x, kernel, stride=1, padding=0):
+    return TensorConvolve2DTranspose(stride, padding).tensor(x, kernel)

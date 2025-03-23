@@ -74,7 +74,6 @@ class OperatorsTest(unittest.TestCase):
             return ag.mult_scalar(x1, 3.0)
         self.numeric_check(forward, x1)
 
-
     def test_mult_sum(self):
         x1 = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
         def forward(params):
@@ -173,6 +172,85 @@ class OperatorsTest(unittest.TestCase):
             self.unravel_params(params, x)
             return -x
         self.numeric_check(forward, x)
+
+    def test_reshape(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(3,4), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x)
+            return ag.reshape(x, (2,6))
+        self.numeric_check(forward, x)
+
+    def test_convolve2d(self):
+        x = ag.Tensor(np.arange(9, dtype=np.float64).reshape(3,3) + 1.0, requires_grad=True)
+        k = ag.Tensor(np.arange(4, dtype=np.float64).reshape(2,2) + 1.0, requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d(x, k)
+        self.numeric_check(forward, x, k)
+
+    def test_convolve2d_with_stride(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d(x, k, stride=2)
+        self.numeric_check(forward, x, k)
+    
+    def test_convolve2d_with_padding(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d(x, k, padding=2)
+        self.numeric_check(forward, x, k)
+
+    def test_convolve2d_with_dilation(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d(x, k, dilate=2)
+        self.numeric_check(forward, x, k)
+
+    def test_convolve2d_with_stride_padding_dilation(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d(x, k, stride=2, padding=2, dilate=2)
+        self.numeric_check(forward, x, k)
+
+    def test_convolve2d_transpose(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d_transpose(x, k)
+        self.numeric_check(forward, x, k)
+
+    def test_convolve2d_transpose_with_stride(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(5,5), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d_transpose(x, k, stride=2)
+        self.numeric_check(forward, x, k)
+    
+    def test_convolve2d_transpose_with_padding(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(8,8), requires_grad=True)
+        k = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x, k)
+            return ag.convolve2d_transpose(x, k, padding=1)
+        self.numeric_check(forward, x, k)
 
 if __name__ == '__main__':
     unittest.main()

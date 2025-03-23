@@ -52,7 +52,6 @@ def grad(node: "Tensor"):
             node_to_grads[p.id].append(dy_dp[pi])        
     return node_to_grads
 
-
 def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progress=False):    
     numericGradients = np.zeros(len(params))
     for param in range(len(params)):

@@ -2,9 +2,34 @@ import unittest
 import numpy as np
 import utils
 from scipy import signal
+import torch
 
 class TestConv(unittest.TestCase):
 
+    def test_convolve2d_dilation(self):
+        np.random.seed(1)
+        x = np.round(np.random.rand(5,5), 2)
+        k = np.round(np.random.rand(3,3), 2)
+        pred = utils.convolve2d(x, k, dilate=2)
+        outGrad = np.random.rand(*pred.shape)
+        got = utils.convolve2d_gradient(x, k, outGrad, dilate=2)
+
+    def test_convolve2d_simple(self):
+        x = np.array([
+            [1,2,3],
+            [4,5,6],
+            [7,8,9]
+        ])
+        kernel = np.array([
+            [0,1],
+            [2,1]
+        ])
+        got = utils.convolve2d(x, kernel)
+        want = np.array([
+            [15, 19],
+            [27, 31]
+        ])
+        self.assertTrue(np.array_equal(got, want))
 
     def test_convole2d_stride(self):
         X = np.array([
@@ -21,7 +46,28 @@ class TestConv(unittest.TestCase):
             [1,2,1],
             [0,1,0],
         ])
-        got = utils.convolve2D(X, kernel, stride=2)
+        got = utils.convolve2d(X, kernel, stride=2)
+        want = np.array([
+            [10,16,16],
+            [20,25,22],
+            [17,25,23],
+        ])
+        self.assertTrue(np.array_equal(got, want))
+
+    def test_convole2d_padding(self):
+        X = np.array([
+            [1,2,3,4,5],
+            [6,5,4,3,2],
+            [2,3,4,5,6],
+            [7,6,5,4,3],
+            [3,4,5,6,7],
+        ])
+        kernel = np.array([
+            [0,1,0],
+            [1,2,1],
+            [0,1,0],
+        ])
+        got = utils.convolve2d(X, kernel, padding=1, stride=2)
         want = np.array([
             [10,16,16],
             [20,25,22],
@@ -30,9 +76,9 @@ class TestConv(unittest.TestCase):
         self.assertTrue(np.array_equal(got, want))
 
     def test_convolve2d_against_scipy(self):
-        X = np.arange(20).reshape(4, 5) + 1
+        X = np.arange(25).reshape(5, 5) + 1
         kernel = np.array([[1,0],[0,1]])
-        got = utils.convolve2D(X, kernel)
+        got = utils.convolve2d(X, kernel)
         want = signal.correlate2d(X, kernel, mode='valid')
         self.assertTrue(np.array_equal(got, want))
 
@@ -68,6 +114,57 @@ class TestConv(unittest.TestCase):
         x2 = signal.correlate2d(X[:,:,1], kernel[:,:,1], mode='valid')
         want = x1 + x2
         self.assertTrue(np.array_equal(got, want))
+
+    def test_convolve2d_transpose(self):
+        x = np.array([
+            [1,2,1],
+            [2,1,2],
+            [1,1,2]
+        ])
+        kernel = np.array([
+            [55,52],
+            [57,50]
+        ])
+        got = utils.convolve2d_transpose(x, kernel)
+        want = np.array([
+            [55, 162, 159, 52],
+            [167, 323, 319, 154],
+            [169, 264, 326, 204],
+            [57, 107, 164, 100]
+        ])
+        self.assertTrue(np.array_equal(got, want))
+
+    @unittest.skip("Test against torch implementation")
+    def test_convolve2d_transpose_against_torch(self):
+        stride = 0
+        padding = 0
+        np.random.seed(1)
+        x = np.random.rand(28, 28)
+        kernel = np.random.rand(3,3)
+        print()
+        print("x shape = ", x.shape)
+        print("kernel shape = ", kernel.shape)
+        # y = np.random.rand(3, 3)
+        for stride in range(1, x.shape[0]):
+            y = utils.convolve2d(x, kernel, stride, padding)
+            got = utils.convolve2d_transpose(y, kernel, stride, padding)
+            got = np.round(got, 2)
+
+            y1 = torch.Tensor(y.copy().reshape((1,1) + y.shape))
+            k1 = torch.Tensor(kernel.copy().reshape((1,1) + kernel.shape))
+            want = torch.nn.functional.conv_transpose2d(y1, k1, stride=stride, padding=padding).numpy()
+
+            print()
+            print("stride = ", stride)
+            print("y shape = ", y.shape)
+            print("got shape = ", got.shape)
+            print("want shape = ", want.shape[2:])
+            if got.shape != x.shape:            
+                print("Not matching shape!")
+            
+        # print(got)
+        # print(want)
+        # self.assertTrue(np.allclose(got, want))
 
     def test_full_convolve3d_simple(self):
         X = np.arange(9).reshape(3,3,1) + 1

@@ -81,7 +81,7 @@ def create_batches(data, batch_size):
     batches = np.vsplit(data, m)
     return np.array(batches)
 
-def zero_dilate(X, space):
+def zero_dilate_2d(X, space):
     """
     X is 2d array of shape (height, width)
     Add zeros between each pixel of the 2d array.
@@ -103,6 +103,30 @@ def zero_dilate(X, space):
         for col in range(width):
             new_col = col + col*space
             Y[new_row, new_col] = X[row, col]
+    return Y
+
+def zero_undilate_2d(X, space):
+    """
+    X is 2d array of shape (height, width)
+    Remove zeros between each pixel of the 2d array.
+    for example:
+    123           10203
+    456  becomes  00000
+    789           40506
+                  00000
+                  70809
+    """
+    if space == 0:
+        return X
+    new_height, new_width = X.shape
+    height = (new_height + space) // (1 + space)
+    width = (new_width + space) // (1 + space)
+    Y = np.zeros((height, width))
+    for row in range(height):
+        new_row = row + row*space
+        for col in range(width):
+            new_col = col + col*space
+            Y[row, col] = X[new_row, new_col]
     return Y
 
 def zero_pad(X, pad):

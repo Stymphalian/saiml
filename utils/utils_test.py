@@ -76,7 +76,7 @@ class TestUtils(unittest.TestCase):
             [0,0,0,0,0],
             [7,0,8,0,9],
         ])
-        got = utils.zero_dilate(X, 1)
+        got = utils.zero_dilate_2d(X, 1)
         self.assertTrue(np.array_equal(got, want))
 
     def test_dilate2(self):
@@ -90,7 +90,7 @@ class TestUtils(unittest.TestCase):
             [0,0,0,0,0,0,0],
             [7,0,0,8,0,0,9],
         ])
-        got = utils.zero_dilate(X, 2)
+        got = utils.zero_dilate_2d(X, 2)
         self.assertTrue(np.array_equal(got, want))
 
 
@@ -103,8 +103,27 @@ class TestUtils(unittest.TestCase):
             [0,  0,  0,  0,  0,  0,  0,  0,  0],  
             [11, 0,  12, 0,  13, 0,  14, 0,  15],
         ])
-        got = utils.zero_dilate(X, 1)
+        got = utils.zero_dilate_2d(X, 1)
         self.assertTrue(np.array_equal(got, want))
+
+    def test_dilate2d_2(self):
+        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float64)
+        dilated = utils.zero_dilate_2d(X, 3)
+        expected = np.array([
+            [1, 0, 0, 0, 2, 0, 0, 0, 3],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [4, 0, 0, 0, 5, 0, 0, 0, 6],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [7, 0, 0, 0, 8, 0, 0, 0, 9],
+        ], dtype=np.float64)
+        self.assertTrue(np.array_equal(dilated, expected))
+
+        undilated = utils.zero_undilate_2d(dilated, 3)
+        self.assertTrue(np.array_equal(undilated, X))
     
 
 if __name__ == '__main__':

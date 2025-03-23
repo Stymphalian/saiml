@@ -1,22 +1,266 @@
+import math
 import numpy as np
 import utils
 
-def convolve2D(X, kernel, stride=1, padding=0):
-    height, width = X.shape
+
+def get_new_height_width(x_shape, kernel_shape, stride, padding, dilate):
+    kh, kw = kernel_shape
+    xh, xw = x_shape
+    xh = xh + (xh - 1) * dilate
+    xw = xw + (xw - 1) * dilate
+
+    new_height = (xh - kh + 2*padding) // stride + 1
+    new_width = (xw - kw + 2*padding) // stride + 1
+    return (new_height, new_width)
+
+def vectorize_kernel(x_shape, kernel, stride=1, padding=0, dilate=0):
+    assert len(x_shape) == 2
+    assert len(kernel.shape) == 2
+    assert kernel.shape[0] == kernel.shape[1]
+
+    xh, xw = x_shape
+    if dilate > 0:
+        xh += (xh - 1) * dilate
+        xw += (xw - 1) * dilate
+    if padding > 0:
+        xh += 2 * padding
+        xw += 2 * padding
     kh, kw = kernel.shape
 
-    new_height = (height - kh + 2*padding) // stride + 1
-    new_width = (width - kw + 2*padding) // stride + 1
-    output = np.zeros((new_height, new_width), dtype=np.float64)
+    new_height, new_width = get_new_height_width(x_shape, kernel.shape, stride, padding, dilate)
+    output_size = new_height * new_width
+    input_size = xh * xw
+    M = np.zeros((output_size, input_size), dtype=np.float64)
+    scratch = np.zeros((xh, xw), dtype=np.float64)
 
-    for nh in range(new_height):
-        for nw in range(new_width):
-            h = nh * stride
-            w = nw * stride
-            x_slice = X[h:h+kh, w:w+kw]
-            v = np.sum(x_slice * kernel)
-            output[nh,nw] = v
+    kernel_index = 0
+    for row in range(new_height):
+        for col in range(new_width):
+            h = row * stride
+            w = col * stride
+
+            scratch[h:h+kh, w:w+kw] = kernel
+            M[kernel_index] = scratch.flatten()
+            scratch[h:h+kh, w:w+kw] = 0
+            kernel_index += 1
+    return M
+
+# https://ca.meron.dev/blog/Vectorized-CNN/
+def getWindows(input, output_size, kernel_size, padding=0, stride=1, dilate=0):
+    working_input = input
+    working_pad = padding
+    # dilate the input if necessary
+    if dilate != 0:
+        working_input = np.insert(working_input, range(1, input.shape[2]), 0, axis=2)
+        working_input = np.insert(working_input, range(1, input.shape[3]), 0, axis=3)
+
+    # pad the input if necessary
+    if working_pad != 0: 
+        working_input = np.pad(working_input, pad_width=((0,), (0,), (working_pad,), (working_pad,)), mode='constant', constant_values=(0.,))
+
+    in_b, in_c, out_h, out_w = output_size
+    out_b, out_c, _, _ = input.shape
+    batch_str, channel_str, kern_h_str, kern_w_str = working_input.strides
+
+    return np.lib.stride_tricks.as_strided(
+        working_input,
+        (out_b, out_c, out_h, out_w, kernel_size, kernel_size),
+        (batch_str, channel_str, stride * kern_h_str, stride * kern_w_str, kern_h_str, kern_w_str)
+    )
+
+def convolve2d_vectorized_on_input(x, kernel, stride=1, padding=0, dilate=0):
+    # https://ca.meron.dev/blog/Vectorized-CNN/
+    n, c, h, w = x.shape
+    kernel_size = kernel.shape[0]
+    weight = kernel.reshape((1,1) + kernel.shape)
+    out_h = (h - kernel_size + 2 * padding) // stride + 1
+    out_w = (w - kernel_size + 2 * padding) // stride + 1
+    windows = getWindows(x, (n, c, out_h, out_w), kernel_size, padding, stride)
+    out = np.einsum('bihwkl,oikl->bohw', windows, weight)
+    return out
+
+def convolve2d_vectorized_on_kernel(x, kernel, stride=1, padding=0, dilate=0):
+    # https://arxiv.org/pdf/1603.07285
+    M = vectorize_kernel(x.shape, kernel, stride, padding, dilate)
+    
+    new_height, new_width = get_new_height_width(
+        x.shape, kernel.shape, stride, padding, dilate)
+    x = utils.zero_dilate_2d(x, dilate)
+    x = np.pad(x, padding, mode='constant', constant_values=0)
+    output = np.matmul(M, x.reshape(-1)).reshape(new_height, new_width)
     return output
+
+def convolve2d_iterative(x, kernel, stride=1, padding=0, dilate=0):
+    assert x.ndim == kernel.ndim
+    assert kernel.shape[0] == kernel.shape[1]
+
+    new_height, new_width = get_new_height_width(
+        x.shape, kernel.shape, stride, padding, dilate)
+    x = utils.zero_dilate_2d(x, dilate)
+    x = np.pad(x, padding, mode='constant', constant_values=0)
+    kh, kw = kernel.shape
+    output = np.zeros((new_height, new_width), dtype=x.dtype)
+
+    for row in range(new_height):
+        for col in range(new_width):
+            h = row * stride
+            w = col * stride
+            if h + kh > x.shape[0] or w + kw > x.shape[1]:
+                continue
+            x_slice = x[h:h+kh, w:w+kw]
+            assert x_slice.shape == kernel.shape
+            v = np.sum(x_slice * kernel)
+            output[row, col] += v
+    return output
+
+
+def convolve2d_gradient_vectorized_on_kernel(x, kernel, outGrad, stride=1, padding=0, dilate=0):
+    # dx, dk = convolve2d_gradient_iterative(x, kernel, outGrad, stride, padding, dilate)
+
+    kernelMatrix = vectorize_kernel(x.shape, kernel, stride, padding, dilate)
+    kernelPlacement = vectorize_kernel(x.shape, np.ones(kernel.shape), stride, padding, dilate)
+    x = utils.zero_dilate_2d(x, dilate)
+    x = np.pad(x, padding, mode='constant', constant_values=0)
+
+    dx = np.matmul(kernelMatrix.T, outGrad.reshape(-1)).reshape(x.shape)
+    if padding > 0:
+        dx = dx[padding:-padding, padding:-padding]
+    if dilate > 0:
+        dx = utils.zero_undilate_2d(dx, dilate)
+
+    # TODO: Need to implement vectorized gradient calculation of dk.
+    a = (outGrad.reshape(-1) * kernelPlacement.T)
+    b = a.T * x.reshape(-1)
+    dk = np.zeros(kernel.shape)
+    assert b.shape == kernelPlacement.shape
+    assert x.size == kernelPlacement.shape[1]
+    for row in range(kernelPlacement.shape[0]):
+        kernel_index = 0
+        for col in range(kernelPlacement.shape[1]):
+            if kernelPlacement[row, col] == 0:
+                continue
+            h = kernel_index // kernel.shape[1]
+            w = kernel_index % kernel.shape[1]
+            dk[h, w] += b[row, col]
+            kernel_index += 1
+        assert kernel_index == kernel.size
+
+    return (dx, dk)
+
+def convolve2d_gradient_iterative(x, kernel, outGrad, stride=1, padding=0, dilate=0):
+    new_height, new_width = get_new_height_width(
+        x.shape, kernel.shape, stride, padding, dilate)
+    x = utils.zero_dilate_2d(x, dilate)
+    x = np.pad(x, padding, mode='constant', constant_values=0)
+    kh, kw = kernel.shape
+    
+    dx = np.zeros(x.shape)
+    dk = np.zeros(kernel.shape)
+
+    for row in range(new_height):
+        for col in range(new_width):
+            h = row * stride
+            w = col * stride
+            x_slice = x[h:h+kh, w:w+kw]
+            dY = outGrad[row, col]
+
+            if h + kh > x.shape[0] or w + kw > x.shape[1]:
+                continue
+            dx[h:h+kh, w:w+kw] += np.multiply(kernel, dY)
+            dk += np.multiply(x_slice, dY)
+        
+    if padding > 0:
+        dx = dx[padding:-padding, padding:-padding]
+    if dilate > 0:
+        dx = utils.zero_undilate_2d(dx, dilate)
+    return (dx, dk)
+
+def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
+    return convolve2d_iterative(x, kernel, stride=stride, padding=padding, dilate=dilate)
+    # return convolve2d_vectorized_on_kernel(x, kernel, stride=stride, padding=padding, dilate=dilate)
+    # x = x.reshape((1,1) + x.shape)
+    # out = convolve2d_vectorized_on_input(x, kernel, stride=stride, padding=padding, dilate=dilate)
+    # return out[0,0]
+
+def convolve2d_gradient(x, kernel, outGrad, stride=1, padding=0, dilate=0):
+    # return convolve2d_gradient_vectorized_on_kernel(
+    #     x, kernel, outGrad, stride=stride, padding=padding, dilate=dilate)
+    return convolve2d_gradient_iterative(
+        x, kernel, outGrad, stride=stride, padding=padding, dilate=dilate)
+
+
+def convolve2d_transpose(y, kernel, stride=1, padding=0):
+    assert y.ndim == kernel.ndim
+    assert kernel.shape[0] == kernel.shape[1]
+
+    yh, yw = y.shape
+    kh, kw = kernel.shape
+
+    # We want to calcualte the stride for the conv_transpose such that we 
+    # can get the same shape as the forward input X.
+    # From the formula for calculating the normal forward conv2d output shape
+    #   y = (x - k + 2p / s) + 1  (1)
+    # isolate for x in that equation.
+    #   x = (y - 1)*s + k - 2p    (2)
+    # The equation for the conv2d_transpose outupt shape is this:
+    #   x = y + (k-1)*s'          (3)
+    # Where s' is the stride we want to determine.
+    # Isolate for s'
+    #   s' = (x - y) / (k-1)      (4)
+    # Substitude (2) into (4) and we can get the desired stride s'
+    xh = (yh-1)*stride + kh - 2*padding
+    xw = (yw-1)*stride + kw - 2*padding
+    stride_row = math.ceil((xh - yh) / (kh -1))
+    stride_col = math.ceil((xw - yw) / (kw -1))
+    if (stride_row < 0) or (stride_col < 0):
+        raise Exception("Stride is negative")
+    new_height = yh + (kh - 1)*stride_row
+    new_width = yw + (kw - 1)*stride_col
+    output = np.zeros((new_height, new_width), dtype=y.dtype)
+
+    for row in range(kh):
+        for col in range(kw):
+            h = row * stride_row
+            w = col * stride_col
+            output[h:h+yh, w:w+yw] += y * kernel[row,col]
+
+    if padding > 0:
+        output = output[padding:-padding, padding:-padding]
+
+    return output
+
+def convolve2d_transpose_gradient(y, kernel, outGrad, stride=1, padding=0):
+    assert y.ndim == kernel.ndim
+    assert kernel.shape[0] == kernel.shape[1]
+
+    yh, yw = y.shape
+    kh, kw = kernel.shape
+
+    xh = (yh-1)*stride + kh - 2*padding
+    xw = (yw-1)*stride + kw - 2*padding
+    stride_row = math.ceil((xh - yh) / (kh -1))
+    stride_col = math.ceil((xw - yw) / (kw -1))
+
+    new_height = yh + (kh - 1)*stride_row
+    new_width = yw + (kw - 1)*stride_col
+    if padding > 0:
+        outGrad = np.pad(outGrad, padding, mode='constant', constant_values=0)
+    assert outGrad.shape == (new_height, new_width), "{} != {}".format(outGrad.shape, (new_height, new_width))
+    
+    dy = np.zeros(y.shape)
+    dk = np.zeros(kernel.shape)
+
+    for row in range(kh):
+        for col in range(kw):
+            h = row * stride_row
+            w = col * stride_col
+            out_slice = outGrad[h:h+yh, w:w+yw]
+            assert (out_slice.shape == y.shape)
+
+            dy += kernel[row,col] * out_slice
+            dk[row, col] += np.sum(y * out_slice)
+
+    return (dy, dk)
 
 def full_convolve2D(X, kernel, stride=1):
     """
@@ -25,14 +269,16 @@ def full_convolve2D(X, kernel, stride=1):
     """
     kh, kw = kernel.shape
     kernel = np.rot90(kernel, 2)
-    X = utils.zero_dilate(X, stride-1)
+    X = utils.zero_dilate_2d(X, stride-1)
     X = np.pad(X, (kw-1, kh-1) , 'constant', constant_values=0)
-    return convolve2D(X, kernel)
+    return convolve2d(X, kernel)
 
     # kh, kw = kernel.shape
     # kernel = np.rot90(kernel, 2)
     # X = np.pad(X, (kw-1, kh-1) , 'constant', constant_values=0)
     # return convolve2D(X, kernel)
+
+
 
 def convolve3D(X, kernel, stride=1, padding=0):
     height, width, channels = X.shape
