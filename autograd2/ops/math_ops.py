@@ -1,14 +1,23 @@
 import numpy as np
 from typing import *
-# from utils.conv import convolve2d, convolve2d_gradient
-from utils import conv
 from ..base import Operator, Tensor
 
 class TensorAdd(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.add(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
-        return (outGrad, outGrad)
+        a = node.inputs[0].value()
+        b = node.inputs[1].value()
+        da = outGrad
+        db = outGrad
+        if a.shape < da.shape:
+            da = np.sum(da).reshape(a.shape)
+        if b.shape < db.shape:
+            db = np.sum(db).reshape(b.shape)
+        assert da.shape == a.shape
+        assert db.shape == b.shape
+
+        return (da, db)
 
 class TensorAddScalar(Operator):
     def __init__(self, scalar):
@@ -16,13 +25,25 @@ class TensorAddScalar(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value() + self.scalar
     def gradients(self, node, outGrad):
-        return (outGrad,)
+        assert outGrad.shape == node.inputs[0].shape
+        return outGrad
     
 class TensorSub(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.subtract(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
-        return (outGrad, -outGrad)
+        a = node.inputs[0].value()
+        b = node.inputs[1].value()
+        da = outGrad
+        db = -outGrad
+        if a.shape < da.shape:
+            da = np.sum(da).reshape(a.shape)
+        if b.shape < db.shape:
+            db = np.sum(db).reshape(b.shape)
+        assert da.shape == a.shape
+        assert db.shape == b.shape
+
+        return (da, db)
     
 class TensorSubScalar(Operator):
     def __init__(self, scalar):
@@ -30,7 +51,8 @@ class TensorSubScalar(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value() - self.scalar
     def gradients(self, node, outGrad):
-        return (outGrad,)
+        assert outGrad.shape == node.inputs[0].shape
+        return outGrad
         
 class TensorMult(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -42,9 +64,9 @@ class TensorMult(Operator):
         db = outGrad * a
 
         if a.shape < da.shape:
-            da = np.sum(da)
+            da = np.sum(da).reshape(a.shape)
         if b.shape < db.shape:
-            db = np.sum(db)
+            db = np.sum(db).reshape(b.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
 
@@ -56,7 +78,9 @@ class TensorMultScalar(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value() * self.scalar
     def gradients(self, node, outGrad):
-        return (outGrad * self.scalar,)
+        dz = outGrad * self.scalar
+        assert dz.shape == node.inputs[0].shape
+        return dz
     
 class TensorDiv(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -69,9 +93,9 @@ class TensorDiv(Operator):
         db = -outGrad * a / (b * b)
 
         if b.shape < db.shape:
-            db = np.sum(db)
+            db = np.sum(db).reshape(b.shape)
         if a.shape < da.shape:    
-            da = np.sum(da)
+            da = np.sum(da).reshape(a.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
 
@@ -83,23 +107,43 @@ class TensorDivScalar(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value() / self.scalar
     def gradients(self, node, outGrad):
-        return (outGrad / self.scalar,)
+        dz = outGrad / self.scalar
+        assert dz.shape == node.inputs[0].shape
+        return dz
 
 class TensorSin(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.sin(inputs[0].value())
     def gradients(self, node, outGrad):
-        return (
-            np.multiply(outGrad, np.cos(node.inputs[0].value())),
-        )
+        dz = np.multiply(outGrad, np.cos(node.inputs[0].value()))
+        assert dz.shape == node.inputs[0].shape
+        return dz
+    
+class TensorCos(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return np.cos(inputs[0].value())
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        dz = np.multiply(outGrad, -np.sin(x))
+        assert dz.shape == node.inputs[0].shape
+        return dz
+    
+class TensorTan(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return np.tan(inputs[0].value())
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        dz = np.multiply(outGrad, 1.0 / np.cos(x)**2)
+        assert dz.shape == node.inputs[0].shape
+        return dz
     
 class TensorLog(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.log(inputs[0].value())
     def gradients(self, node, outGrad):
-        return (
-            np.multiply(outGrad, 1.0 / node.inputs[0].value()),
-        )
+        dz = np.multiply(outGrad, 1.0 / node.inputs[0].value())
+        assert dz.shape == node.inputs[0].shape
+        return dz
     
 class TensorMatMul(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -111,6 +155,9 @@ class TensorMatMul(Operator):
         W = node.inputs[1].value()
         dx = np.matmul(outGrad, W.T) 
         dw = np.matmul(X.T, outGrad) 
+
+        assert dx.shape == X.shape
+        assert dw.shape == W.shape
         return (dx, dw)
     
 class TensorSum(Operator):
@@ -119,14 +166,18 @@ class TensorSum(Operator):
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         dz = np.ones(x.shape)
-        return (np.multiply(outGrad, dz),)
+        dz = np.multiply(outGrad, dz)
+        assert dz.shape == x.shape
+        return dz
     
 class TensorExp(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.exp(inputs[0].value())
     def gradients(self, node, outGrad):
         x = np.exp(node.inputs[0].value())
-        return (np.multiply(outGrad, x),)
+        dx = np.multiply(outGrad, x)
+        assert dx.shape == x.shape
+        return dx
     
 class TensorMean(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -134,7 +185,9 @@ class TensorMean(Operator):
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         grad = np.ones(x.shape) / x.size
-        return (np.multiply(outGrad, grad),)
+        dx = np.multiply(outGrad, grad)
+        assert dx.shape == x.shape
+        return dx
     
 class TensorPower(Operator):
     def __init__(self, power, *args, **kwargs):
@@ -145,7 +198,9 @@ class TensorPower(Operator):
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         dx = np.power(x, self.power - 1) * self.power
-        return (np.multiply(outGrad, dx),)
+        dx = np.multiply(outGrad, dx)
+        assert (dx.shape == x.shape)
+        return dx
     
 class TensorMax(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -155,13 +210,16 @@ class TensorMax(Operator):
         xi = np.argmax(x)
         dx = np.zeros(node.inputs[0].value().shape)
         dx[xi] = 1
-        return (outGrad * dx,)
+        dx = outGrad * dx
+        assert dx.shape == x.shape
+        return dx
     
 class TensorNegate(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return -inputs[0].value()
     def gradients(self, node, outGrad):
-        return (-outGrad,)
+        assert outGrad.shape == node.inputs[0].shape
+        return -outGrad
     
 class TensorReshape(Operator):
     def __init__(self, shape):
@@ -169,49 +227,63 @@ class TensorReshape(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value().reshape(self.shape)
     def gradients(self, node, outGrad):
-        return (outGrad.reshape(node.inputs[0].value().shape),)
+        dx = outGrad.reshape(node.inputs[0].value().shape)
+        assert dx.shape == node.inputs[0].shape
+        return dx
     
-class TensorConvolve2D(Operator):
-    def __init__(self, stride, padding, dilate):
-        assert(stride >= 1)
-        assert(padding >= 0)
-        assert(dilate >= 0)
-        self.stride = stride
-        self.padding = padding
-        self.dilate = dilate
-
+class TensorVerticalStack(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        x = inputs[0].value()
-        kernel = inputs[1].value()
-        return conv.convolve2d(
-            x, kernel, self.stride, self.padding, self.dilate)
+        # Only allow stacking of the same shape.
+        for x in inputs:
+            assert x.shape == inputs[0].shape
+        flat = np.array([x.value() for x in inputs])
+        return np.vstack(flat)
 
     def gradients(self, node, outGrad):
-        x = node.inputs[0].value()
-        kernel = node.inputs[1].value()
-        return conv.convolve2d_gradient(
-            x, kernel, outGrad, self.stride, self.padding, self.dilate)
+        x = node.inputs
+        dx = np.vsplit(outGrad, len(x))
+        return tuple(dx)
     
-class TensorConvolve2DTranspose(Operator):
-    def __init__(self, stride, padding):
-        assert(stride >= 1)
-        assert(padding >= 0)
-        self.stride = stride
-        self.padding = padding
-
+class TensorVerticalSplit(Operator):
+    def __init__(self, num_splits, axis=0):
+        self.num_splits = num_splits
+        self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        kernel = inputs[1].value()
-
-        assert(kernel.shape[0] == kernel.shape[1])
-        return conv.convolve2d_transpose(
-            x, kernel, self.stride, self.padding)
-
+        out = np.split(x, self.num_splits, axis=self.axis)
+        return out
+    def gradients(self, node, outGrad):
+        assert len(outGrad) == self.num_splits
+        x = node.inputs[0].value()
+        for grad in outGrad:
+            assert grad[self.axis].shape == x[self.axis].shape
+        dx = np.vstack(outGrad)
+        return dx
+    
+class TensorBroadcast(Operator):
+    def __init__(self, shape):
+        self.shape = shape
+    def compute(self, *inputs: Tuple[Tensor]):
+        x = inputs[0].value()
+        return np.broadcast_to(x, self.shape)
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
-        kernel = node.inputs[1].value()
-        return conv.convolve2d_transpose_gradient(
-            x, kernel, outGrad, self.stride, self.padding)
+        assert(x.ndim == outGrad.ndim)
+
+        sum_axes = []
+        for axis in range(x.ndim):
+            s1 = x.shape[axis]
+            s2 = outGrad.shape[axis]
+            if s1 != s2:
+                assert s1 == 1
+                # The axis of the original shape is 1 so we need to do a sum 
+                # along the previous axis to compute the gradient
+                sum_axes.append(axis)
+
+        dx = np.sum(outGrad, axis=tuple(sum_axes))
+        dx = np.reshape(dx, x.shape)
+        assert dx.shape == x.shape, f"dx shape: {dx.shape}, x shape: {x.shape}"
+        return dx
 
 def constant(a):
     return Tensor(a, requires_grad=False)
@@ -235,6 +307,10 @@ def matmul(a, b):
     return TensorMatMul().tensor(a, b)
 def sin(a):
     return TensorSin().tensor(a)
+def cos(a):
+    return TensorCos().tensor(a)
+def tan(a):
+    return TensorTan().tensor(a)
 def log(a):
     return TensorLog().tensor(a)
 def sum(a):
@@ -251,7 +327,9 @@ def neg(a):
     return TensorNegate().tensor(a)
 def reshape(a, shape):
     return TensorReshape(shape).tensor(a)
-def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
-    return TensorConvolve2D(stride, padding, dilate).tensor(x, kernel)
-def convolve2d_transpose(x, kernel, stride=1, padding=0):
-    return TensorConvolve2DTranspose(stride, padding).tensor(x, kernel)
+def vstack(*inputs):
+    return TensorVerticalStack().tensor(*inputs)
+def vsplit(a, num_splits):
+    return TensorVerticalSplit(num_splits).tensor(a)
+def broadcast(a, shape):
+    return TensorBroadcast(shape).tensor(a)

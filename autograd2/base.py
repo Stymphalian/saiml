@@ -45,26 +45,50 @@ class Tensor(Node):
             inputs: Tuple["Tensor"]=()):
         super().__init__()
 
-        self.data = np.array(data, dtype=dtype)
+        self._data = np.array(data, dtype=dtype)
+        self._grad = None
         self.dtype = dtype
         self.operator = operator
-        self.grad = None
         self.inputs = inputs
         self.requires_grad = requires_grad
 
     def value(self):
-        if self.data is None:
+        if self._data is None:
             if self.operator is not None:
-                self.data = self.operator.compute(*self.inputs)
-        return self.data
+                self._data = self.operator.compute(*self.inputs)
+        return self._data
+    
+    # @property
+    # def data(self):
+    #     return self.value()
+    
+    # @data.setter
+    # def data(self, value):
+    #     self.value()
+    #     self._data[:] = value
+
+    @property
+    def grad(self):
+        return self._grad
+    
+    @grad.setter
+    def grad(self, value):
+        if self.grad is None:
+            self._grad = value
+        else:
+            self._grad[:] = value
     
     def backward(self):
         ag.grad(self)
 
     def gradients(self, outGrad):
         if self.operator is None:
-            return np.multiply(outGrad,np.ones(self.data.shape))
-        return self.operator.gradients(self, outGrad)
+            return np.multiply(outGrad,np.ones(self._data.shape))
+        grads = self.operator.gradients(self, outGrad)
+        if type(grads) is not tuple:
+            grads = (grads,)
+        assert len(grads) == len(self.inputs)
+        return grads
 
     @property
     def shape(self):
@@ -75,6 +99,15 @@ class Tensor(Node):
     @property
     def size(self):
         return self.value().size
+    
+    def __getitem__(self, index):
+        return ag.Tensor(self._data[index], requires_grad=self.requires_grad)
+
+    def __setitem__(self, index, value):
+        if not isinstance(value, Tensor):
+            self._data[index] = value
+        else:
+            self._data[index] = value.value()
     
     def __repr__(self):
         return "Tensor(" + str(self.value()) + ")"

@@ -77,23 +77,15 @@ class TestConvs(unittest.TestCase):
         X = X.astype(np.float64)
         Y = layer.forward(context, X)
 
-        kernel1_c1 = layer.W[0, 0]
-        kernel1_c2 = layer.W[0, 1]
-        kernel2_c1 = layer.W[1, 0]
-        kernel2_c2 = layer.W[1, 1]
         bias1 = layer.b[0]
         bias2 = layer.b[1]
-        z11  = utils.convolve2d(X[0,0], kernel1_c1)
-        z11 += utils.convolve2d(X[0,1], kernel1_c2)
+        z11  = utils.convolve2d(X[0], layer.W[0])[0]
         z11 += bias1
-        z12  = utils.convolve2d(X[0,0], kernel2_c1)
-        z12 += utils.convolve2d(X[0,1], kernel2_c2)
+        z12  = utils.convolve2d(X[0], layer.W[1])[0]
         z12 += bias2
-        z21  = utils.convolve2d(X[1,0], kernel1_c1)
-        z21 += utils.convolve2d(X[1,1], kernel1_c2)
+        z21  = utils.convolve2d(X[1], layer.W[0])[0]
         z21 += bias1
-        z22  = utils.convolve2d(X[1,0], kernel2_c1)
-        z22 += utils.convolve2d(X[1,1], kernel2_c2)
+        z22  = utils.convolve2d(X[1], layer.W[1])[0]
         z22 += bias2
         want = np.array([
             [z11, z12],

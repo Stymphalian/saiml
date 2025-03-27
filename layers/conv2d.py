@@ -58,7 +58,7 @@ class Conv2DLayer(Layer):
         
         output_shape = (batches, self.output_channels, self.output_height, self.output_width)
         output = np.zeros(output_shape, dtype=np.float64)
-        padX = utils.zero_pad(X, self.padding)
+        padX = utils.zero_pad2(X, self.padding)
         kh, kw = (self.kernel_size, self.kernel_size)
     
         for batch in range(batches):    
@@ -88,7 +88,7 @@ class Conv2DLayer(Layer):
         
         dW = np.zeros(self.W.shape, dtype=np.float64)
         db = np.zeros(self.b.shape, dtype=np.float64)
-        padX = utils.zero_pad(X, self.padding)
+        padX = utils.zero_pad2(X, self.padding)
         dEdx = np.zeros(padX.shape, dtype=np.float64)
         kh, kw = (self.kernel_size, self.kernel_size)
         pad = self.padding

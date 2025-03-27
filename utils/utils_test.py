@@ -9,7 +9,7 @@ class TestUtils(unittest.TestCase):
     def test_zero_pad_shape(self):
         np.random.seed(1)
         x = np.random.randn(4, 2, 3, 3)
-        x_pad = utils.zero_pad(x, 2)
+        x_pad = utils.zero_pad2(x, 2)
         self.assertEqual(x_pad.shape, (4, 2, 7, 7))
 
     def test_zero_pad(self):
@@ -64,8 +64,31 @@ class TestUtils(unittest.TestCase):
             ]
         ])
         want = np.array([image1, image2])
-        got = utils.zero_pad(X, 2)
+        got = utils.zero_pad2(X, 2)
         self.assertTrue(np.array_equal(got, want))
+
+    def test_general_dilate(self):
+        x = np.arange(2*9).reshape(2,3,3) + 1
+        want = np.array([
+            [
+                [1,0,2,0,3],
+                [0,0,0,0,0],
+                [4,0,5,0,6],
+                [0,0,0,0,0],
+                [7,0,8,0,9],
+            ],
+            [
+                [10, 0,  11, 0,  12],  
+                [0,  0,  0,  0,  0],  
+                [13, 0,  14, 0,  15],  
+                [0,  0,  0,  0,  0],  
+                [16, 0,  17, 0,  18],
+            ],
+            
+        ])
+        got = utils.zero_dilate(x, 1, axes=(1,2))
+        self.assertTrue(np.array_equal(got, want))
+
 
     def test_dilate(self):
         X = np.arange(9).reshape(3,3) + 1

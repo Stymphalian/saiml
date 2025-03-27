@@ -8,31 +8,31 @@ class TestConv(unittest.TestCase):
 
     def test_convolve2d_dilation(self):
         np.random.seed(1)
-        x = np.round(np.random.rand(5,5), 2)
-        k = np.round(np.random.rand(3,3), 2)
+        x = np.round(np.random.rand(1,5,5), 2)
+        k = np.round(np.random.rand(1,3,3), 2)
         pred = utils.convolve2d(x, k, dilate=2)
         outGrad = np.random.rand(*pred.shape)
         got = utils.convolve2d_gradient(x, k, outGrad, dilate=2)
 
     def test_convolve2d_simple(self):
-        x = np.array([
+        x = np.array([[
             [1,2,3],
             [4,5,6],
             [7,8,9]
-        ])
-        kernel = np.array([
+        ]])
+        kernel = np.array([[
             [0,1],
             [2,1]
-        ])
+        ]])
         got = utils.convolve2d(x, kernel)
-        want = np.array([
+        want = np.array([[
             [15, 19],
             [27, 31]
-        ])
+        ]])
         self.assertTrue(np.array_equal(got, want))
 
     def test_convole2d_stride(self):
-        X = np.array([
+        x = np.array([[
             [0,0,0,0,0,0,0],
             [0,1,2,3,4,5,0],
             [0,6,5,4,3,2,0],
@@ -40,54 +40,64 @@ class TestConv(unittest.TestCase):
             [0,7,6,5,4,3,0],
             [0,3,4,5,6,7,0],
             [0,0,0,0,0,0,0]
-        ])
-        kernel = np.array([
+        ]])
+        kernel = np.array([[
             [0,1,0],
             [1,2,1],
             [0,1,0],
-        ])
-        got = utils.convolve2d(X, kernel, stride=2)
-        want = np.array([
+        ]])
+        got = utils.convolve2d(x, kernel, stride=2)
+        want = np.array([[
             [10,16,16],
             [20,25,22],
             [17,25,23],
-        ])
+        ]])
         self.assertTrue(np.array_equal(got, want))
 
     def test_convole2d_padding(self):
-        X = np.array([
+        x = np.array([[
             [1,2,3,4,5],
             [6,5,4,3,2],
             [2,3,4,5,6],
             [7,6,5,4,3],
             [3,4,5,6,7],
-        ])
-        kernel = np.array([
+        ]])
+        kernel = np.array([[
             [0,1,0],
             [1,2,1],
             [0,1,0],
-        ])
-        got = utils.convolve2d(X, kernel, padding=1, stride=2)
-        want = np.array([
+        ]])
+        got = utils.convolve2d(x, kernel, padding=1, stride=2)
+        want = np.array([[
             [10,16,16],
             [20,25,22],
             [17,25,23],
-        ])
+        ]])
         self.assertTrue(np.array_equal(got, want))
 
     def test_convolve2d_against_scipy(self):
-        X = np.arange(25).reshape(5, 5) + 1
-        kernel = np.array([[1,0],[0,1]])
-        got = utils.convolve2d(X, kernel)
-        want = signal.correlate2d(X, kernel, mode='valid')
-        self.assertTrue(np.array_equal(got, want))
+        x = np.arange(25).reshape(1, 5, 5) + 1
+        kernel = np.array([[[1,0],[0,1]]])
+        got = utils.convolve2d(x, kernel)
+        want = signal.correlate2d(x[0], kernel[0], mode='valid')
+        self.assertTrue(np.allclose(got[0], want))
 
     def test_full_convolve2d_against_scipy(self):
-        X = np.arange(9).reshape(3,3) + 1
+        x = np.arange(9).reshape(3,3) + 1
         kernel = np.array([[1,0],[0,1]])
-        got = utils.full_convolve2D(X, kernel)
-        want = signal.convolve2d(X, kernel, mode='full')
-        self.assertTrue(np.array_equal(got, want))
+        got = utils.full_convolve2D(x, kernel)
+        want = signal.convolve2d(x, kernel, mode='full')
+        self.assertTrue(np.array_equal(got[0], want))
+
+    def test_convolve2d_multiple_channels_against_scipy(self):
+        np.random.seed(1)
+        x = np.random.rand(2, 5, 5)
+        kernel = np.random.rand(2, 3, 3)
+        got = utils.convolve2d(x, kernel)
+        want = np.zeros((3, 3))
+        for i in range(2):
+            want += signal.correlate2d(x[i], kernel[i], mode='valid')
+        self.assertTrue(np.allclose(got, want))
 
     def test_convolve3d_simple(self):
         X = np.arange(40).reshape(4, 5, 2) + 1
@@ -116,22 +126,48 @@ class TestConv(unittest.TestCase):
         self.assertTrue(np.array_equal(got, want))
 
     def test_convolve2d_transpose(self):
-        x = np.array([
+        x = np.array([[
             [1,2,1],
             [2,1,2],
             [1,1,2]
-        ])
-        kernel = np.array([
+        ]])
+        kernel = np.array([[
             [55,52],
             [57,50]
-        ])
+        ]])
         got = utils.convolve2d_transpose(x, kernel)
-        want = np.array([
+        want = np.array([[
             [55, 162, 159, 52],
             [167, 323, 319, 154],
             [169, 264, 326, 204],
             [57, 107, 164, 100]
+        ]])
+        self.assertTrue(np.array_equal(got, want))
+
+    def test_convolve2d_transpose_with_channels(self):
+        np.random.seed(1)
+        x = np.array([[
+            [1,2,1],
+            [2,1,2],
+            [1,1,2]
+        ]])
+        kernel = np.array([
+            [
+                [55,52],
+                [57,50]
+            ],
+            [
+                [-55,-52],
+                [-57,-50]
+            ]
         ])
+        got = utils.convolve2d_transpose(x, kernel)
+        want = np.array([[
+                [0,0,0,0],
+                [0,0,0,0],
+                [0,0,0,0],
+                [0,0,0,0],
+        ]])
         self.assertTrue(np.array_equal(got, want))
 
     @unittest.skip("Test against torch implementation")

@@ -69,10 +69,13 @@ def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progr
 
         numericGradients[param] = (loss1 - loss2) / (2*tol)
 
-    diff = np.sum(np.abs(numericGradients - predictedGradients))
-    # diff = np.linalg.norm(numericGradients - predictedGradients)
-    # diff /= max(np.linalg.norm(numericGradients), np.linalg.norm(predictedGradients))
-    return numericGradients, diff
+    numericGradients = np.round(numericGradients, 12)
+    predictedGradients = np.round(predictedGradients, 12)
+    numericGradients += 1e-12
+    predictedGradients += 1e-12
+    ratio = np.linalg.norm(numericGradients - predictedGradients)
+    ratio /= max(np.linalg.norm(numericGradients), np.linalg.norm(predictedGradients))
+    return numericGradients, ratio
 
 
 

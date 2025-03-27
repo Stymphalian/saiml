@@ -20,7 +20,7 @@ def numericalGradientCheck(fn, parameters: np.array, predictedGradient, h=1e-7):
     # denominator = np.linalg.norm(numericGradient + predictedGradient)
     # denominator = np.linalg.norm(numericGradient) + np.linalg.norm(predictedGradient)
     # diff = numerator / denominator
-    diff = np.sum(numerator)
+    diff = numerator
     return numericGradient, diff
 
 def covariance_matrix(data):
@@ -66,9 +66,10 @@ def standardize_dataset(data):
 
 
 def onehot_encode(y, size):
-    onehot = np.zeros(size)
-    onehot[y] = 1
-    return onehot.reshape(size, 1)
+    return np.identity(size)[y].reshape(size, 1)
+    # onehot = np.zeros(size)
+    # onehot[y] = 1
+    # return onehot.reshape(size, 1)
 
 def onehot_decode(y):
     return np.argmax(y)
@@ -81,9 +82,9 @@ def create_batches(data, batch_size):
     batches = np.vsplit(data, m)
     return np.array(batches)
 
-def zero_dilate_2d(X, space):
+def zero_dilate(x, space, axes=None):
     """
-    X is 2d array of shape (height, width)
+    For example if X is 2d array of shape (height, width)
     Add zeros between each pixel of the 2d array.
     for example:
     123           10203
@@ -93,43 +94,105 @@ def zero_dilate_2d(X, space):
                   70809
     """
     if space == 0:
-        return X
-    height, width = X.shape
-    new_height = height + (height-1)*space
-    new_width = width + (width-1)*space
-    Y = np.zeros((new_height, new_width))
-    for row in range(height):
-        new_row = row + row*space
-        for col in range(width):
-            new_col = col + col*space
-            Y[new_row, new_col] = X[row, col]
-    return Y
+        return x
+    if axes is None:
+        axes = range(x.ndim)
+    if x.ndim < len(axes):
+        raise Exception("Dimension of x must be at least {0}".format(len(axes)))
+    a = x
+    for s in range(space):
+        for axis in axes:
+            shape_len = a.shape[axis]
+            a = np.insert(a, range(1, shape_len, s+1), 0, axis=axis)
+    return a  
 
-def zero_undilate_2d(X, space):
+def zero_undilate(x, space, axes=None):
     """
-    X is 2d array of shape (height, width)
+    If X is 2d array of shape (height, width)
     Remove zeros between each pixel of the 2d array.
     for example:
-    123           10203
-    456  becomes  00000
-    789           40506
-                  00000
-                  70809
+    10203           123           
+    00000  becomes  456  
+    40506           789           
+    00000                          
+    70809               
     """
     if space == 0:
-        return X
-    new_height, new_width = X.shape
-    height = (new_height + space) // (1 + space)
-    width = (new_width + space) // (1 + space)
-    Y = np.zeros((height, width))
-    for row in range(height):
-        new_row = row + row*space
-        for col in range(width):
-            new_col = col + col*space
-            Y[row, col] = X[new_row, new_col]
-    return Y
+        return x
+    if axes is None:
+        axes = range(x.ndim)
+    if x.ndim < len(axes):
+        raise Exception("Dimension of x must be at least {0}".format(len(axes)))
+    a = x
+    for axis in axes:
+        shape_len = a.shape[axis]
+        axes_to_remove = range(1, shape_len, space+1)
+        axes_to_remove = [range(x,x+space) for x in axes_to_remove]
+        a = np.delete(a, axes_to_remove, axis=axis)
+    return a
 
-def zero_pad(X, pad):
+def zero_dilate_2d(x, space):
+    return zero_dilate(x, space, axes=(0,1))
+    # if space == 0:
+    #     return x
+    # a = x
+    # for s in range(space):
+    #     height, width = a.shape
+    #     a = np.insert(a, range(1, height, s+1), 0, axis=0)
+    #     a = np.insert(a, range(1, width, s+1), 0, axis=1)
+    # return a    
+    # height, width = X.shape
+    # new_height = height + (height-1)*space
+    # new_width = width + (width-1)*space
+    # Y = np.zeros((new_height, new_width))
+    # for row in range(height):
+    #     new_row = row + row*space
+    #     for col in range(width):
+    #         new_col = col + col*space
+    #         Y[new_row, new_col] = X[row, col]
+    # return Y
+
+def zero_undilate_2d(x, space):
+    return zero_undilate(x, space, axes=(0,1))
+    # if space == 0:
+    #     return x
+    # a = x
+    # height, width = a.shape
+    # horz = range(1, width, space+1)
+    # vert = range(1, height, space+1)
+    # horz = [range(x,x+space) for x in horz]
+    # vert = [range(x,x+space) for x in vert]
+    # a = np.delete(a, vert, axis=0)
+    # a = np.delete(a, horz, axis=1)
+    # return a
+    # if space == 0:
+    #     return X
+    # new_height, new_width = X.shape
+    # height = (new_height + space) // (1 + space)
+    # width = (new_width + space) // (1 + space)
+    # Y = np.zeros((height, width))
+    # for row in range(height):
+    #     new_row = row + row*space
+    #     for col in range(width):
+    #         new_col = col + col*space
+    #         Y[row, col] = X[new_row, new_col]
+    # return Y
+
+def zero_pad(x, pad, axes=None):
+    if axes is None:
+        axes = range(x.ndim)
+    if pad == 0:
+        return x
+
+    padding = (pad, pad)
+    pads = [(0,0)] * x.ndim
+    for axis in axes:
+        pads[axis] = padding
+
+    x_pad = np.pad(x, pads, mode='constant', constant_values=0)
+    return x_pad
+
+def zero_pad2(X, pad):
     """
     Pad with zeros all images of the dataset X. 
     The padding is applied to the height and width of an image, 
@@ -142,14 +205,15 @@ def zero_pad(X, pad):
     Returns:
     X_pad -- padded image of shape (m, n_C, n_H + 2*pad, n_W + 2*pad)
     """
-    if pad == 0:
-        return X
+    return zero_pad(X, pad, axes=(2,3))
+    # if pad == 0:
+    #     return X
     
-    ### START CODE HERE ### (≈ 1 line)
-    X_pad = np.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad)), 'constant', constant_values = (0,0))
-    ### END CODE HERE ###
+    # ### START CODE HERE ### (≈ 1 line)
+    # X_pad = np.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad)), 'constant', constant_values = (0,0))
+    # ### END CODE HERE ###
     
-    return X_pad
+    # return X_pad
 
 
 def train(model, x_train, y_train, number_epochs=1, learning_rate=0.1, batch_size=50):
