@@ -67,7 +67,6 @@ def get_convolution_positions(x_shape, kernel_shape, stride=1, padding=0):
     row_incr = np.repeat(horz, kh*kw)
     row = kernel_row + row_incr
 
-
     # Second get the y coordinates along a single column
     kernel_y = np.repeat(np.arange(kh), kw)
     kernel_col = np.tile(kernel_y, vert_len)
@@ -215,7 +214,6 @@ def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, padding=0, dil
     if padding > 0:
         dx = dx[:, padding:-padding, padding:-padding]
 
-
     rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
     x2 = xpad[:, rows, cols]
     x2 = np.transpose(x2, (0,2,1))
@@ -339,7 +337,64 @@ def convolve2d_transpose_gradient(y, kernel, outGrad, stride=1, padding=0, outer
         stride=stride,
         padding=padding,
         outer_padding=outer_padding)
+
+def max_pool2d(x, kernel_size, stride=1, padding=0):
+    assert x.ndim == 3
+    xc, xh, xw = x.shape
+    kc, kh, kw = (1, kernel_size, kernel_size)
+    new_height = (xh - kh + 2*padding) // stride + 1
+    new_width = (xw - kw + 2*padding) // stride + 1
+
+    rows, cols = get_convolution_positions(x.shape, (kc, kh, kw), stride, padding)
+    xpad = utils.zero_pad(x, padding, axes=(1,2))
+    x1 = xpad[:, rows, cols]
+    x2 = np.max(x1, axis=2)
+    x3 = np.reshape(x2, (1, new_height, new_width))
+    return x3
+
+def max_pool2d_gradient(x, kernel_size, outGrad, stride=1, padding=0):
+    assert x.ndim == 3
+    assert outGrad.ndim == 3
+    assert outGrad.shape[0] == 1
+
+    xc, xh, xw = x.shape
+    kc, kh, kw = (1, kernel_size, kernel_size)
+    new_height = (xh - kh + 2*padding) // stride + 1
+    new_width = (xw - kw + 2*padding) // stride + 1
+    assert outGrad.shape == (1, new_height, new_width)
+
+    xpad = utils.zero_pad(x, padding, axes=(1,2))
+    dx = np.zeros(xpad.shape)
+
+    for c in range(xc):
+        for row in range(new_height):
+            for col in range(new_width):
+                h = row * stride
+                w = col * stride
+                
+                dY = outGrad[0, row, col]
+                x_slice = xpad[c, h:h+kh, w:w+kw]
+                max_coords = np.unravel_index(np.argmax(x_slice), x_slice.shape)
+                dx[c, h+max_coords[0], w+max_coords[1]] += dY
+        
+    if padding > 0:
+        dx = dx[:, padding:-padding, padding:-padding]
+    return dx
+
+    # rows, cols = get_convolution_positions(x.shape, (kc, kh, kw), stride, padding)
+    # xpad = utils.zero_pad(x, padding, axes=(1,2))
+    # dx = np.zeros(xpad.shape)
+    # x1 = x[:, rows, cols]
+    # xmax = np.argmax(x1, axis=2, keepdims=False).flatten()
+    # len_y = np.arange(new_height*new_width)
+    # row_indices = rows[len_y, xmax]
+    # col_indices = cols[len_y, xmax]
+    # dx[:, row_indices, col_indices] = outGrad
     
+    # if padding > 0:
+    #     dx = dx[:, padding:-padding, padding:-padding]
+    # return dx
+
 def full_convolve2D(x, kernel, stride=1):
     """
     X.shape == (height, widhth)

@@ -27,19 +27,10 @@ class Pool(Module):
         )
 
     def forward(self, x):
-        kh,kw = (self.kernel_size, self.kernel_size)
         if self.mode == Pool.AVERAGE:
-            return ag.convolve2d(
-                x, 
-                self.average_kernel, 
-                stride=self.stride
-            )
+            return ag.convolve2d(x, self.average_kernel, stride=self.stride)
         elif self.mode == Pool.MAX:
-            return ag.convolve2d(
-                x,
-                self.average_kernel,
-                stride=self.stride
-            )
+            return ag.max_pool2d(x, self.kernel_size, stride=self.stride)
 
 # class PoolLayer(Layer):
 #     MAX = "max"

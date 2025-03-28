@@ -396,6 +396,20 @@ class TestConv(unittest.TestCase):
         self.assertTrue(np.allclose(want_dx, got_dx))
         self.assertTrue(np.allclose(want_dk, got_dk))
 
+    def test_max_pool(self):
+        np.random.seed(1)
+        x = np.arange(5*5)+1
+        np.random.shuffle(x)
+        x = np.reshape(x, (1, 5, 5))
+        got = utils.max_pool2d(x, 2)
+        want = np.array([[
+            [19, 20, 20, 22],
+            [21, 20, 23, 23],
+            [21, 16, 25, 25],
+            [17, 16, 25, 25],
+        ]])
+        self.assertTrue(np.array_equal(got, want))
+
     
 
 if __name__ == '__main__':

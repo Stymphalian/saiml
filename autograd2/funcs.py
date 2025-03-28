@@ -98,6 +98,18 @@ class TensorSigmoid(Operator):
             _negative_sigmoid_derivative(x) * outGrad
         )
         return dx
+    
+class TensorMaxPool(Operator):
+    def __init__(self, kernel_size, stride, padding):
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.padding = padding
+    def compute(self, *inputs: Tuple[Tensor]):
+        x = inputs[0].value()
+        return conv.max_pool2d(x, self.kernel_size, self.stride, self.padding)
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        return conv.max_pool2d_gradient(x, self.kernel_size, outGrad, self.stride, self.padding)
 
 # from loss import (
 #     softmax_internal,
@@ -132,6 +144,8 @@ def softmax(x):
     return exps / ag.sum(exps)
 def relu(x):
     return (x + ag.norm(x)) / 2.0
+def max_pool2d(x, kernel_size, stride=1, padding=0):
+    return TensorMaxPool(kernel_size, stride, padding).tensor(x)
 
 # def convolve2d_input(x, kernel_size, stride=1, padding=0):
 
