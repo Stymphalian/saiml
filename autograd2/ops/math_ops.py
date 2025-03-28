@@ -284,6 +284,15 @@ class TensorBroadcast(Operator):
         dx = np.reshape(dx, x.shape)
         assert dx.shape == x.shape, f"dx shape: {dx.shape}, x shape: {x.shape}"
         return dx
+    
+class TensorNorm(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return np.linalg.norm(inputs[0].value())   
+    def gradients(self, node, outGrad):
+        x = node.inputs[0].value()
+        dx = outGrad * x / np.linalg.norm(x)
+        assert dx.shape == x.shape
+        return dx
 
 def constant(a):
     return Tensor(a, requires_grad=False)
@@ -333,3 +342,5 @@ def vsplit(a, num_splits):
     return TensorVerticalSplit(num_splits).tensor(a)
 def broadcast(a, shape):
     return TensorBroadcast(shape).tensor(a)
+def norm(a):
+    return TensorNorm().tensor(a)

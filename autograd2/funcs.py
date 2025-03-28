@@ -130,3 +130,8 @@ def softmax(x):
     shiftx = x - ag.max(x)
     exps = ag.exp(shiftx)
     return exps / ag.sum(exps)
+def relu(x):
+    return (x + ag.norm(x)) / 2.0
+
+# def convolve2d_input(x, kernel_size, stride=1, padding=0):
+

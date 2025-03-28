@@ -1,6 +1,12 @@
 import unittest
 import numpy as np
 import utils
+from utils.conv import (
+    _convolve2d_iterative,
+    _convolve2d_gradient_iterative,
+    _convolve2d_vectorized,
+    _convolve2d_gradient_vectorized
+)
 from scipy import signal
 import torch
 
@@ -170,6 +176,78 @@ class TestConv(unittest.TestCase):
         ]])
         self.assertTrue(np.array_equal(got, want))
 
+
+    def test_get_conv_positions(self):
+        np.random.seed(0)
+        stride=1
+        padding=0
+        xc, xh, xw = 1, 5, 5
+        kc, kh, kw = 1, 2, 2
+        x = np.arange(xh*xw).reshape(xc,xh,xw) * -1
+        kernel = np.random.rand(kh*kw).reshape(kc,kh,kw)
+
+        rows, cols = utils.get_convolution_positions(
+            x.shape, kernel.shape, stride, padding)
+        got = x[:, rows, cols]
+        want = np.array([[
+            [  0,  -1,  -5,  -6],
+            [ -1,  -2,  -6,  -7],
+            [ -2,  -3,  -7,  -8],
+            [ -3,  -4,  -8,  -9],
+            [ -5,  -6, -10, -11],
+            [ -6,  -7, -11, -12],
+            [ -7,  -8, -12, -13],
+            [ -8,  -9, -13, -14],
+            [-10, -11, -15, -16],
+            [-11, -12, -16, -17],
+            [-12, -13, -17, -18],
+            [-13, -14, -18, -19],
+            [-15, -16, -20, -21],
+            [-16, -17, -21, -22],
+            [-17, -18, -22, -23],
+            [-18, -19, -23, -24]
+        ]])
+        self.assertTrue(np.array_equal(got, want))
+
+    def test_get_conv_positions_with_strides(self):
+        np.random.seed(0)
+        stride=2
+        padding=0
+        xc, xh, xw = 1, 5, 5
+        kc, kh, kw = 1, 2, 2
+        x = np.arange(xh*xw).reshape(xc,xh,xw) * -1
+        kernel = np.random.rand(kh*kw).reshape(kc,kh,kw)
+
+        rows, cols = utils.get_convolution_positions(
+            x.shape, kernel.shape, stride, padding)
+        got = x[:, rows, cols]
+        want = np.array([[
+            [  0,  -1,  -5,  -6],
+            [ -2,  -3,  -7,  -8],
+            [-10, -11, -15, -16],
+            [-12, -13, -17, -18]
+        ]])
+        self.assertTrue(np.array_equal(got, want))
+
+    def test_vectorize_input_for_conv(self):
+        np.random.seed(0)
+        x = np.arange(5*5).reshape(1, 5, 5) + 1
+        kernel = (1, 3, 3)
+        got = utils.vectorize_input_for_convolution(x, kernel, stride=2, padding=1)
+        want = np.array([[
+            [ 0,  0,  0,  0,  1,  2,  0,  6,  7],
+            [ 0,  0,  0,  2,  3,  4,  7,  8,  9],
+            [ 0,  0,  0,  4,  5,  0,  9, 10,  0],
+            [ 0,  6,  7,  0, 11, 12,  0, 16, 17],
+            [ 7,  8,  9, 12, 13, 14, 17, 18, 19],
+            [ 9, 10,  0, 14, 15,  0, 19, 20,  0],
+            [ 0, 16, 17,  0, 21, 22,  0,  0,  0],
+            [17, 18, 19, 22, 23, 24,  0,  0,  0],
+            [19, 20,  0, 24, 25,  0,  0,  0,  0],
+        ]])
+        self.assertTrue(np.array_equal(got, want))
+
+
     @unittest.skip("Test against torch implementation")
     def test_convolve2d_transpose_against_torch(self):
         stride = 0
@@ -252,6 +330,71 @@ class TestConv(unittest.TestCase):
         self.assertAlmostEqual(np.mean(dA), 2.9470599583887345)
         self.assertAlmostEqual(np.mean(dW), 5.6470033527213745)
         self.assertAlmostEqual(np.mean(db), 8.184838514561605)
+
+    def test_vectorize_kernel(self):
+        np.random.seed(1)
+        x = np.random.rand(3,3,3)
+        k = np.arange(3*2*2).reshape(3,2,2) + 1
+        got = utils.vectorize_kernel(x.shape, k)
+
+        want = np.array([
+            [
+                [ 1.,  2.,  0.,  3.,  4.,  0.,  0.,  0.,  0.],
+                [ 0.,  1.,  2.,  0.,  3.,  4.,  0.,  0.,  0.],
+                [ 0.,  0.,  0.,  1.,  2.,  0.,  3.,  4.,  0.],
+                [ 0.,  0.,  0.,  0.,  1.,  2.,  0.,  3.,  4.],
+            ],
+            [
+                [ 5.,  6.,  0.,  7.,  8.,  0.,  0.,  0.,  0.],
+                [ 0.,  5.,  6.,  0.,  7.,  8.,  0.,  0.,  0.],
+                [ 0.,  0.,  0.,  5.,  6.,  0.,  7.,  8.,  0.],
+                [ 0.,  0.,  0.,  0.,  5.,  6.,  0.,  7.,  8.],
+            ],
+            [
+                [ 9., 10.,  0., 11., 12.,  0.,  0.,  0.,  0.],
+                [ 0.,  9., 10.,  0., 11., 12.,  0.,  0.,  0.],
+                [ 0.,  0.,  0.,  9., 10.,  0., 11., 12.,  0.],
+                [ 0.,  0.,  0.,  0.,  9., 10.,  0., 11., 12.],
+            ]
+        ])
+        self.assertTrue(np.array_equal(got, want))
+    
+    def test_convolve_vectorized(self):
+        np.random.seed(1)
+        x = np.arange(5*5).reshape(1,5,5) + 1
+        k = np.identity(3).reshape(1,3,3)
+        grad = np.ones((1, 5-3+1, 5-3+1)) / (3*3)
+        want = _convolve2d_iterative(x, k)
+        want_dx, want_dk = _convolve2d_gradient_iterative(x, k, grad)
+        got = _convolve2d_vectorized(x, k)
+        got_dx, got_dk = _convolve2d_gradient_vectorized(x, k, grad)
+
+        self.assertEqual(want.shape, got.shape)
+        self.assertEqual(want_dx.shape, got_dx.shape)
+        self.assertEqual(want_dk.shape, got_dk.shape)
+        self.assertTrue(np.allclose(want, got))
+        self.assertTrue(np.allclose(want_dx, got_dx))
+        self.assertTrue(np.allclose(want_dk, got_dk))
+
+    def test_convolve_vectorized_with_stride_padding(self):
+        np.random.seed(1)
+        stride=2
+        padding=2
+        x = np.arange(8*8, dtype=np.float64).reshape(1,8,8) + 1
+        k = np.random.rand(3,3).reshape(1,3,3)
+        want = _convolve2d_iterative(x, k, stride, padding)
+        grad = np.ones(want.shape) / want.size
+        want_dx, want_dk = _convolve2d_gradient_iterative(x, k, grad, stride, padding)
+         
+        got = _convolve2d_vectorized(x, k, stride, padding)
+        got_dx, got_dk = _convolve2d_gradient_vectorized(x, k, grad, stride, padding)
+
+        self.assertEqual(want.shape, got.shape)
+        self.assertEqual(want_dx.shape, got_dx.shape)
+        self.assertEqual(want_dk.shape, got_dk.shape)
+        self.assertTrue(np.allclose(want, got))
+        self.assertTrue(np.allclose(want_dx, got_dx))
+        self.assertTrue(np.allclose(want_dk, got_dk))
 
     
 

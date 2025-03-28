@@ -35,13 +35,97 @@ def get_new_height_width(x_shape, kernel_shape, stride, padding, dilate):
     new_width = (xw - kw + 2*padding) // stride + 1
     return (new_height, new_width)
 
+def vectorize_input_for_convolution(x, kernel_shape, stride=1, padding=0):
+    assert x.ndim == len(kernel_shape)
+    assert x.ndim == 3
+    assert kernel_shape[1] == kernel_shape[2]
+    rows, cols = get_convolution_positions(x.shape, kernel_shape, stride, padding)
+    x_pad = utils.zero_pad(x, padding, axes=(1,2))
+    return x_pad[:, rows, cols]
+
+def get_convolution_positions(x_shape, kernel_shape, stride=1, padding=0):
+    """
+    Returns the rows, and cols positions of the convolutions. Working from 
+    the top-left corner to the bottom right corner.
+    rows.shape = (#convolutions, kernel_height*kernel_width)
+    cols.shape = (#convolutions, kernel_height*kernel_width)
+    """
+    xc, xh, xw = x_shape
+    kc, kh, kw = kernel_shape
+    if padding > 0:
+        xh += 2 * padding
+        xw += 2 * padding
+
+    horz = np.array(range(0, xw-kw+1, stride))
+    vert = np.array(range(0, xh-kh+1, stride))
+    horz_len = len(horz)
+    vert_len = len(vert)
+
+    # First get the x coordinate positions along a single row
+    kernel_x = np.tile(np.arange(kw), kh)
+    kernel_row = np.tile(kernel_x, horz_len)
+    row_incr = np.repeat(horz, kh*kw)
+    row = kernel_row + row_incr
+
+
+    # Second get the y coordinates along a single column
+    kernel_y = np.repeat(np.arange(kh), kw)
+    kernel_col = np.tile(kernel_y, vert_len)
+    col_incr = np.repeat(vert, kh*kw)
+    col = kernel_col + col_incr
+    col = col.reshape(vert_len, kh*kw)
+
+    # Get the columns across all the rows
+    # Get the rows across all the columns
+    rows_across_cols = np.tile(row, vert_len).reshape(-1, kh*kw)
+    cols_across_rows = np.tile(col, horz_len).reshape(-1, kh*kw)
+
+    return cols_across_rows, rows_across_cols
+
+def vectorize_kernel(x_shape, kernel, stride=1, padding=0, dilate=0):
+    """
+    Output.shape == (new_height*new_width, x_shape.size)
+    """
+    # TODO: How to do this operation purely using numpy?
+    assert len(x_shape) == 3
+    assert len(kernel.shape) == 3
+    assert kernel.shape[1] == kernel.shape[2]
+    assert x_shape[0] == kernel.shape[0]
+
+    xc, xh, xw = x_shape
+    if dilate > 0:
+        xh += (xh - 1) * dilate
+        xw += (xw - 1) * dilate
+    if padding > 0:
+        xh += 2 * padding
+        xw += 2 * padding
+    kc, kh, kw = kernel.shape
+
+    new_height, new_width = get_new_height_width(
+        x_shape, kernel.shape, stride, padding, dilate)
+    output_size = new_height * new_width
+    input_size = xh * xw
+    M = np.zeros((kc, output_size, input_size), dtype=np.float64)
+    scratch = np.zeros((xc, xh, xw), dtype=np.float64)
+
+    kernel_index = 0
+    for row in range(new_height):
+        for col in range(new_width):
+            h = row * stride
+            w = col * stride
+
+            scratch[:, h:h+kh, w:w+kw] = kernel[:]
+            M[:, kernel_index] = scratch.reshape(kc, -1)
+            scratch[:, h:h+kh, w:w+kw] = 0
+            kernel_index += 1
+    return M
+
 def _convolve2d_iterative(x, kernel, stride=1, padding=0, dilate=0):
     assert x.ndim == kernel.ndim
     assert x.ndim == 3
     spatial_axes = (1,2)
     assert kernel.shape[spatial_axes[0]] == kernel.shape[spatial_axes[1]]
     
-
     new_height, new_width = get_new_height_width(
         x.shape, kernel.shape, stride, padding, dilate)
     x = utils.zero_dilate(x, dilate, axes=spatial_axes)
@@ -96,6 +180,47 @@ def _convolve2d_gradient_iterative(x, kernel, outGrad, stride=1, padding=0, dila
         dx = dx[:, padding:-padding, padding:-padding]
     if dilate > 0:
         dx = utils.zero_undilate(dx, dilate, axes=spatial_axes)
+    return (dx, dk)
+
+def _convolve2d_vectorized(x, kernel, stride=1, padding=0, dilate=0):
+    assert kernel.ndim == 3
+    assert x.ndim == 3
+    assert x.shape[0] == kernel.shape[0]
+
+    new_height, new_width = get_new_height_width(
+        x.shape, kernel.shape, stride, padding, dilate)
+
+    rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
+    x_pad = utils.zero_pad(x, padding, axes=(1,2))
+    x_prime = x_pad[:, rows, cols]
+    flat_kernel = kernel.reshape(kernel.shape[0], -1, 1)
+    z = np.matmul(x_prime, flat_kernel)
+    z = np.sum(z, axis=0)
+    z = np.reshape(z, (1, new_height, new_width))
+    return z
+
+def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, padding=0, dilate=0):
+    assert outGrad.ndim == 3
+    assert kernel.ndim == 3
+    assert x.ndim == 3
+    assert x.shape[0] == kernel.shape[0]
+    assert outGrad.shape[0] == 1
+
+    xpad = utils.zero_pad(x, padding, axes=(1,2))
+
+    vkernel = vectorize_kernel(x.shape, kernel, stride, padding)
+    vkernel = np.transpose(vkernel, (0,2,1))
+    outGrad = outGrad.flatten().reshape(1,-1,1)
+    dx = np.matmul(vkernel, outGrad).reshape(xpad.shape)
+    if padding > 0:
+        dx = dx[:, padding:-padding, padding:-padding]
+
+
+    rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
+    x2 = xpad[:, rows, cols]
+    x2 = np.transpose(x2, (0,2,1))
+    dk = np.matmul(x2, outGrad).reshape(kernel.shape)
+
     return (dx, dk)
 
 def _convolve2d_transpose_iterative(y, kernel, stride=1, padding=0, outer_padding=0):
@@ -189,11 +314,14 @@ def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, paddi
     return (dy, dk)
 
 def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
-    return _convolve2d_iterative(x, kernel, stride=stride, padding=padding, dilate=dilate)
+    # return _convolve2d_iterative(x, kernel, stride=stride, padding=padding, dilate=dilate)
+    return _convolve2d_vectorized(x, kernel, stride=stride, padding=padding)
 
 def convolve2d_gradient(x, kernel, outGrad, stride=1, padding=0, dilate=0):
-    return _convolve2d_gradient_iterative(
-        x, kernel, outGrad, stride=stride, padding=padding, dilate=dilate)
+    # return _convolve2d_gradient_iterative(
+    #     x, kernel, outGrad, stride=stride, padding=padding, dilate=dilate)
+    return _convolve2d_gradient_vectorized(
+        x, kernel, outGrad, stride=stride, padding=padding)
 
 def convolve2d_transpose(y, kernel, stride=1, padding=0, outer_padding=0):
     return _convolve2d_transpose_iterative(
@@ -212,7 +340,6 @@ def convolve2d_transpose_gradient(y, kernel, outGrad, stride=1, padding=0, outer
         padding=padding,
         outer_padding=outer_padding)
     
-
 def full_convolve2D(x, kernel, stride=1):
     """
     X.shape == (height, widhth)

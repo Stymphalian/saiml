@@ -39,9 +39,12 @@ def toposort(end_node):
             else:
                 child_counts[parent] -= 1
 
-def grad(node: "Tensor"):
+def grad(node: "Tensor", outGrad=None):
     node_to_grads = defaultdict(list)
-    node_to_grads[node.id] = [np.ones(node.value().shape, dtype=np.float64)]
+
+    if outGrad is None:
+        outGrad = np.ones(node.value().shape, dtype=np.float64)
+    node_to_grads[node.id] = [outGrad]
     
     for v in toposort(node):
         dy_dv = sum(node_to_grads[v.id])

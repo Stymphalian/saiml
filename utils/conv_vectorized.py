@@ -17,38 +17,6 @@
 #     new_width = (xw - kw + 2*padding) // stride + 1
 #     return (new_height, new_width)
 
-# def vectorize_kernel(x_shape, kernel, stride=1, padding=0, dilate=0):
-#     assert len(x_shape) == 2
-#     assert len(kernel.shape) == 2
-#     assert kernel.shape[0] == kernel.shape[1]
-
-#     xh, xw = x_shape
-#     if dilate > 0:
-#         xh += (xh - 1) * dilate
-#         xw += (xw - 1) * dilate
-#     if padding > 0:
-#         xh += 2 * padding
-#         xw += 2 * padding
-#     kh, kw = kernel.shape
-
-#     new_height, new_width = get_new_height_width(x_shape, kernel.shape, stride, padding, dilate)
-#     output_size = new_height * new_width
-#     input_size = xh * xw
-#     M = np.zeros((output_size, input_size), dtype=np.float64)
-#     scratch = np.zeros((xh, xw), dtype=np.float64)
-
-#     kernel_index = 0
-#     for row in range(new_height):
-#         for col in range(new_width):
-#             h = row * stride
-#             w = col * stride
-
-#             scratch[h:h+kh, w:w+kw] = kernel
-#             M[kernel_index] = scratch.flatten()
-#             scratch[h:h+kh, w:w+kw] = 0
-#             kernel_index += 1
-#     return M
-
 # # https://ca.meron.dev/blog/Vectorized-CNN/
 # def getWindows(input, output_size, kernel_size, padding=0, stride=1, dilate=0):
 #     working_input = input

@@ -78,8 +78,8 @@ class Tensor(Node):
         else:
             self._grad[:] = value
     
-    def backward(self):
-        ag.grad(self)
+    def backward(self, outGrad=None):
+        ag.grad(self, outGrad=outGrad)
 
     def gradients(self, outGrad):
         if self.operator is None:

@@ -298,6 +298,14 @@ class OperatorsTest(unittest.TestCase):
             return ag.broadcast(x1, (3,3,3,3))
         self.numeric_check(forward, x1)
 
+    def test_norm(self):
+        np.random.seed(1)
+        x1 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x1)
+            return ag.norm(x1)
+        self.numeric_check(forward, x1)
+
 if __name__ == '__main__':
     unittest.main()
     

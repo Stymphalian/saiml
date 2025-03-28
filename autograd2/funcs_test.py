@@ -111,6 +111,14 @@ class OperatorsTest(unittest.TestCase):
             return z3
         self.numeric_check(forward, w, b)
 
+    def test_relu(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(10), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x)
+            return ag.relu(x)
+        self.numeric_check(forward, x)
+
 if __name__ == '__main__':
     unittest.main()
     
