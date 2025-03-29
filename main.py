@@ -44,21 +44,13 @@ class AutoEncoder(Module):
             Sigmoid()
         ])
 
-    def get_params_grads(self):
-        p1, g1 = self.encoder.get_params_grads()
-        p2, g2 = self.z_mean.get_params_grads()
-        p3, g3 = self.z_log_var.get_params_grads()
-        p4, g4 = self.sampling.get_params_grads()
-        p5, g5 = self.decoder.get_params_grads()
-        return (np.concatenate([p1, p2, p3, p4, p5]), np.concatenate([g1, g2, g3, g4, g5]))
-
-    def set_params(self, params):
-        count = 0
-        for layer in [self.encoder, self.z_mean, self.z_log_var, self.sampling, self.decoder]:
-            params_size, _ = layer.get_params_grads_size()
-            sub_params = params[count:count+params_size]
-            layer.set_params(sub_params)
-            count += params_size
+        self.params = [
+            self.encoder,
+            self.z_mean, 
+            self.z_log_var,
+            self.sampling,
+            self.decoder
+        ]
 
     def forward(self, x):
         z = self.encoder.forward(x)
@@ -119,9 +111,9 @@ def main():
     x_train = ag.Tensor(x_train.reshape(1, 28, 28), requires_grad=True)
     y_train = ag.Tensor(y_train.reshape(2, 1))
 
-    np.random.seed(5)
+    np.random.seed(1)
     encoder = AutoEncoder()
-
+    
     def calculate_loss(x, z_log_var, z_mean, y):
         # reconstruction loss
         reconstruction_loss = ag.mean_square_error(x, y)
@@ -132,35 +124,51 @@ def main():
 
         total_loss = reconstruction_loss + kl_loss
         return total_loss
-
-    for learning_rate, num_iterations in [(0.1, 1000), (0.01, 1000), (0.0001, 3000)]:
-        context = {"learning_rate": learning_rate}
-        print("Learning rate: ", learning_rate)
-        for epoc in range(num_iterations):
-            x, z_log_var, z_mean = encoder.forward(x_train)
-            loss = calculate_loss(x, z_log_var, z_mean, x_train)
-            loss.backward()
-            encoder.backward(context)
-            if epoc % 1000 == 0:
-                print(loss)
     
-    import matplotlib.pyplot as plt
-    plt.imshow(x.value().reshape(28, 28), cmap='gray')
-    plt.show()
+    x, z_log_var, z_mean = encoder.forward(x_train)
+    loss = calculate_loss(x, z_log_var, z_mean, x_train)
+    loss.backward()
+
+    # for learning_rate, num_iterations in [(0.1, 1000), (0.01, 1000), (0.0001, 3000)]:
+    #     context = {"learning_rate": learning_rate}
+    #     print("Learning rate: ", learning_rate)
+    #     for epoc in range(num_iterations):
+    #         x, z_log_var, z_mean = encoder.forward(x_train)
+    #         loss = calculate_loss(x, z_log_var, z_mean, x_train)
+    #         loss.backward()
+    #         encoder.backward(context)
+    #         if epoc % 1000 == 0:
+    #             print(loss)
+    
+    # import matplotlib.pyplot as plt
+    # plt.imshow(x.value().reshape(28, 28), cmap='gray')
+    # plt.show()
 
     # loss = ag.cross_entropy_loss(x, y_train)
     
-    # params, predGrads = encoder.get_params_grads()
-    # def forward(params):
-    #     encoder.set_params(params)
-    #     pred = encoder.forward(x_train)
-    #     loss = ag.cross_entropy_loss(pred, y_train)
-    #     return loss.value()
-    # grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads, print_progress=True)
-    # print(grad)
-    # print(predGrads)
-    # print(diffs)
-    # print(ag.Node._NODE_AUTO_ID)
+
+    model = Sequence([
+        Flatten(),
+        Dense(28*28, 10),
+        Sigmoid(),
+        Softmax()
+    ])
+    pred = model.forward(x_train)
+    y_train = ag.Tensor(utils.onehot_encode(0, 10).reshape(10, 1))
+    loss = ag.cross_entropy_loss(pred, y_train)
+    loss.backward()
+    
+    params, predGrads = model.get_params_and_grads()
+    def forward(params):
+        model.set_params(params)
+        pred = model.forward(x_train)
+        loss = ag.cross_entropy_loss(pred, y_train)
+        return loss.value()
+    grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads, print_progress=True)
+    print(grad)
+    print(predGrads)
+    print(diffs)
+    print(ag.Node._NODE_AUTO_ID)
 
 
 def main2():

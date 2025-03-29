@@ -1,4 +1,42 @@
 import numpy as np
+import autograd2 as ag
+from typing import *
+
+def _unpack_params(value: object) -> List[ag.Tensor]:
+    if isinstance(value, ag.Tensor):
+        return [value]
+    elif isinstance(value, Module):
+        return value.unpack_params()
+    elif isinstance(value, dict):
+        params = []
+        for k, v in value.items():
+            params += _unpack_params(v)
+        return params
+    elif isinstance(value, (list, tuple)):
+        params = []
+        for v in value:
+            params += _unpack_params(v)
+        return params
+    else:
+        return []
+    
+def _pack_params(value: object, flat_params: np.ndarray):
+    if isinstance(value, ag.Tensor):
+        value._data = flat_params.reshape(value.shape)
+    elif isinstance(value, Module):
+        value.set_params(flat_params)
+    elif isinstance(value, dict):
+        count = 0
+        for k, v in value.items():
+            v_size = sum([x.size for x in _unpack_params(v)])
+            _pack_params(v, flat_params[count:count+v_size])
+            count += v_size
+    elif isinstance(value, (list, tuple)):
+        count = 0
+        for v in value:
+            v_size = sum([x.size for x in _unpack_params(v)])
+            _pack_params(v, flat_params[count:count+v_size])
+            count += v_size
 
 class Module:
     def __init__(self):
@@ -12,33 +50,31 @@ class Module:
 
     def backward(self, context):
         """Run backwards to update the gradients of all the parameters"""
+        # params = self.get_params()
+        # TODO: Fix this, this update wont' work with modules
+        # nested within the params
         learning_rate = context["learning_rate"]
         for param in self.params:
             param._data -= learning_rate * param.grad
 
-    def get_params_grads_size(self):
-        params_size = sum(x.size for x in self.params)
-        grads_size = sum(x.size for x in self.params)
-        return (params_size, grads_size)
+    def unpack_params(self):
+        return _unpack_params(self.params)
+
+    def get_params(self):
+        params = self.unpack_params()
+        flat_params = [p.value().reshape(-1) for p in params]
+        return np.concatenate(flat_params)
     
-    def get_params_grads(self):
-        params = [x._data.reshape(-1) for x in self.params]
-        grads = [x.grad.reshape(-1) for x in self.params]
-        if len(params) > 0:
-            params = np.concatenate(params)
-        else:
-            params = np.array([])
-        if len(grads) > 0:
-            grads = np.concatenate(grads)
-        else:
-            grads = np.array([])
-        return (params, grads)
+    def get_grads(self):
+        params = self.unpack_params()
+        grads = [x.grad.reshape(-1) for x in params]
+        return np.concatenate(grads)
     
-    def set_params(self, params):
-        count = 0
-        for pi in range(len(self.params)):
-            data_size = self.params[pi].size
-            data_shape = self.params[pi].shape
-            data = params[count:count+data_size].reshape(data_shape)
-            self.params[pi]._data = data
-            count += data_size
+    def get_params_and_grads(self):
+        params = self.unpack_params()
+        flat_params = [p.value().reshape(-1) for p in params]
+        grads = [x.grad.reshape(-1) for x in params]
+        return np.concatenate(flat_params), np.concatenate(grads)
+    
+    def set_params(self, flat_params):
+        _pack_params(self.params, flat_params)

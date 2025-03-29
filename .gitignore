@@ -2,3 +2,5 @@ data/
 __pycache__
 .venv
 thirdparty
+Test.ipynb
+.ipynb_checkpoints
