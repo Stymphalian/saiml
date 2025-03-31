@@ -24,6 +24,37 @@ class TestPool(unittest.TestCase):
         self.assertEquals(got.shape,(1,3,3))
         self.assertTrue(np.allclose(got.value(), want))
 
+    def test_pool2d_max_forward_with_multi_channel(self):
+        layer = Pool((2,5,5), mode=Pool.MAX, kernel_size=3)
+        x = ag.Tensor(np.array([
+            [
+                [1,2,3,4,5],
+                [6,5,4,3,2],
+                [2,3,4,5,6],
+                [0,1,2,3,4],
+                [0,9,2,6,7]
+            ],
+            [
+                [1,2,3,4,5],
+                [6,5,4,3,2],
+                [2,3,4,5,6],
+                [0,1,2,3,4],
+                [0,9,2,6,7]
+            ]
+        ]), requires_grad=True)
+        got = layer.forward(x)
+        want = np.array([
+            # [6,5,6],
+            # [6,5,6],
+            # [9,9,7]
+
+            [12,  10,  12],
+            [12,  10,  12],
+            [18,  18,  14]
+        ]).reshape(1,3,3)
+        self.assertEquals(got.shape,(1,3,3))
+        self.assertTrue(np.allclose(got.value(), want))
+
     def test_pool2d_average_forward(self):
         layer = Pool((1,5,5), mode=Pool.AVERAGE, kernel_size=3)
         x = ag.Tensor(np.array([
