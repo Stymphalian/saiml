@@ -161,12 +161,36 @@ class TensorMatMul(Operator):
         return (dx, dw)
     
 class TensorSum(Operator):
+    def __init__(self, axis=None, keepdims=False):
+        self.axis = axis
+        self.keepdims = keepdims
+
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.sum(inputs[0].value())
+        x = inputs[0].value()
+        y = np.sum(x, axis=self.axis, keepdims=self.keepdims)
+        if self.keepdims:
+            if self.axis is None:
+                x_shape= (1,)*x.ndim    
+            else:
+                x_shape = list(x.shape)
+                x_shape[self.axis] = 1
+                x_shape = tuple(x_shape)
+            assert y.shape == x_shape
+        return y
+
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
-        dz = np.ones(x.shape)
-        dz = np.multiply(outGrad, dz)
+        assert outGrad.ndim <= x.ndim
+        if outGrad.ndim < x.ndim:
+            if self.axis is None:
+                outGradShape = (1,)*x.ndim
+            else:
+                outGradShape = list(x.shape)
+                outGradShape[self.axis] = 1
+            outGrad = outGrad.reshape(tuple(outGradShape))
+        dz = np.broadcast_to(outGrad, x.shape)
+        # dz = np.ones(x.shape)
+        # dz = np.multiply(outGrad, dz)
         assert dz.shape == x.shape
         return dz
     
@@ -220,71 +244,7 @@ class TensorNegate(Operator):
     def gradients(self, node, outGrad):
         assert outGrad.shape == node.inputs[0].shape
         return -outGrad
-    
-class TensorReshape(Operator):
-    def __init__(self, shape):
-        self.shape = shape
-    def compute(self, *inputs: Tuple[Tensor]):
-        return inputs[0].value().reshape(self.shape)
-    def gradients(self, node, outGrad):
-        dx = outGrad.reshape(node.inputs[0].value().shape)
-        assert dx.shape == node.inputs[0].shape
-        return dx
-    
-class TensorVerticalStack(Operator):
-    def compute(self, *inputs: Tuple[Tensor]):
-        # Only allow stacking of the same shape.
-        for x in inputs:
-            assert x.shape == inputs[0].shape
-        flat = np.array([x.value() for x in inputs])
-        return np.vstack(flat)
-
-    def gradients(self, node, outGrad):
-        x = node.inputs
-        dx = np.vsplit(outGrad, len(x))
-        return tuple(dx)
-    
-class TensorVerticalSplit(Operator):
-    def __init__(self, num_splits, axis=0):
-        self.num_splits = num_splits
-        self.axis = axis
-    def compute(self, *inputs: Tuple[Tensor]):
-        x = inputs[0].value()
-        out = np.split(x, self.num_splits, axis=self.axis)
-        return out
-    def gradients(self, node, outGrad):
-        assert len(outGrad) == self.num_splits
-        x = node.inputs[0].value()
-        for grad in outGrad:
-            assert grad[self.axis].shape == x[self.axis].shape
-        dx = np.vstack(outGrad)
-        return dx
-    
-class TensorBroadcast(Operator):
-    def __init__(self, shape):
-        self.shape = shape
-    def compute(self, *inputs: Tuple[Tensor]):
-        x = inputs[0].value()
-        return np.broadcast_to(x, self.shape)
-    def gradients(self, node, outGrad):
-        x = node.inputs[0].value()
-        assert(x.ndim == outGrad.ndim)
-
-        sum_axes = []
-        for axis in range(x.ndim):
-            s1 = x.shape[axis]
-            s2 = outGrad.shape[axis]
-            if s1 != s2:
-                assert s1 == 1
-                # The axis of the original shape is 1 so we need to do a sum 
-                # along the previous axis to compute the gradient
-                sum_axes.append(axis)
-
-        dx = np.sum(outGrad, axis=tuple(sum_axes))
-        dx = np.reshape(dx, x.shape)
-        assert dx.shape == x.shape, f"dx shape: {dx.shape}, x shape: {x.shape}"
-        return dx
-    
+        
 class TensorNorm(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.linalg.norm(inputs[0].value())   
@@ -322,8 +282,8 @@ def tan(a):
     return TensorTan().tensor(a)
 def log(a):
     return TensorLog().tensor(a)
-def sum(a):
-    return TensorSum().tensor(a)
+def sum(a, axis=None, keepdims=False):
+    return TensorSum(axis, keepdims).tensor(a)
 def exp(a):
     return TensorExp().tensor(a)
 def mean(a):
@@ -334,13 +294,5 @@ def max(a):
     return TensorMax().tensor(a)
 def neg(a):
     return TensorNegate().tensor(a)
-def reshape(a, shape):
-    return TensorReshape(shape).tensor(a)
-def vstack(*inputs):
-    return TensorVerticalStack().tensor(*inputs)
-def vsplit(a, num_splits):
-    return TensorVerticalSplit(num_splits).tensor(a)
-def broadcast(a, shape):
-    return TensorBroadcast(shape).tensor(a)
 def norm(a):
     return TensorNorm().tensor(a)

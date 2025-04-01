@@ -44,15 +44,18 @@ class TestPool(unittest.TestCase):
         ]), requires_grad=True)
         got = layer.forward(x)
         want = np.array([
-            # [6,5,6],
-            # [6,5,6],
-            # [9,9,7]
-
-            [12,  10,  12],
-            [12,  10,  12],
-            [18,  18,  14]
-        ]).reshape(1,3,3)
-        self.assertEquals(got.shape,(1,3,3))
+            [
+                [6,5,6],
+                [6,5,6],
+                [9,9,7],
+            ],
+            [
+                [6,5,6],
+                [6,5,6],
+                [9,9,7],
+            ],
+        ]).reshape(2,3,3)
+        self.assertEquals(got.shape,(2,3,3))
         self.assertTrue(np.allclose(got.value(), want))
 
     def test_pool2d_average_forward(self):
@@ -119,29 +122,52 @@ class TestPool(unittest.TestCase):
         self.assertTrue(np.allclose(got, want))
 
     def test_pool2d_max_full(self):
-        layer = Pool((1,5,5), mode=Pool.MAX, kernel_size=3, stride=2)
+        layer = Pool((2,5,5), mode=Pool.MAX, kernel_size=3, stride=2)
         x = ag.Tensor(np.array([
-            [1,  2,  3,  4,  5],
-            [6,  7,  8,  9,  10],
-            [11, 12, 13, 12, 11],
-            [13, 14, 15, 16, 17],
-            [18, 17, 16, 17, 19],
-
-        ]).reshape(1,5,5), requires_grad=True)
+            [
+                [1,  2,  3,  4,  5],
+                [6,  7,  8,  9,  10],
+                [11, 12, 13, 12, 11],
+                [13, 14, 15, 16, 17],
+                [18, 17, 16, 17, 19],    
+            ],
+            [
+                [1,  2,  3,  4,  5],
+                [6,  7,  8,  9,  10],
+                [11, 12, 13, 12, 11],
+                [13, 14, 15, 16, 17],
+                [18, 17, 16, 17, 19],
+            ]
+        ]).reshape(2,5,5), requires_grad=True)
         got_pred = layer.forward(x)
         got_pred.backward(np.ones(got_pred.shape)*0.1)
 
         want_pred = np.array([
-            [13, 13],
-            [18, 19],
-        ]).reshape(1,2,2)
+            [
+                [13, 13],
+                [18, 19],
+            ],
+            [
+                [13, 13],
+                [18, 19],
+            ]
+        ]).reshape(2,2,2)
         want_grad = np.array([
-            [0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.2, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.1, 0.0, 0.0, 0.0, 0.1],
-        ]).reshape(1,5,5)
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.2, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0, 0.0, 0.1],
+            ],
+            [
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.2, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.1, 0.0, 0.0, 0.0, 0.1],
+            ]
+        ]).reshape(2,5,5)
 
         self.assertEquals(got_pred.shape, want_pred.shape)
         self.assertEquals(x.grad.shape, want_grad.shape)

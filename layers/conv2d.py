@@ -33,7 +33,7 @@ class Conv2d(Module):
             z1 = ag.convolve2d(x, kernel, stride=self.stride, padding=self.padding)
             z2 = ag.add(z1, bias)
             output.append(z2)
-        return ag.vstack(*output)
+        return ag.vstack(output)
     
 class Conv2dTranspose(Module):
     def __init__(self, input_shape, num_kernels, kernel_size=3, stride=1, padding=0, outer_padding=0):

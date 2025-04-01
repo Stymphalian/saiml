@@ -138,11 +138,72 @@ class OperatorsTest(unittest.TestCase):
         self.numeric_check(forward, x)
 
     def test_sum(self):        
-        x = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x)
-            return ag.sum(x)
-        self.numeric_check(forward, x)
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=None)
+        want = 36.0
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=0)
+        want = np.array([
+            [6.0, 8.0],
+            [10.0, 12.0]
+        ])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=1)
+        want = np.array([
+            [4.0, 6.0],
+            [12.0,14.0]
+        ])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=2)
+        want = np.array([
+            [3.0, 7.0],
+            [11.0, 15.0]
+        ])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=None, keepdims=True)
+        want = np.array([[[36.0]]])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=0, keepdims=True)
+        want = np.array([[
+            [6.0, 8.0],
+            [10.0, 12.0]
+        ]])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=1, keepdims=True)
+        want = np.array([
+            [[4.0, 6.0]],
+            [[12.0,14.0]]
+        ])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+        x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
+        y = ag.sum(x, axis=2, keepdims=True)
+        want = np.array([
+            [[3.0], [7.0]],
+            [[11.0], [15.0]]
+        ])
+        self.assertTrue(np.array_equal(y.value(), want))
+
+    def test_sum_backward(self):
+        for axis in [None, 0, 1, 2]:
+            for keepdims in [True, False]:
+                x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+                def forward(params):
+                    self.unravel_params(params, x)
+                    return ag.sum(x, axis=axis, keepdims=keepdims)
+                self.numeric_check(forward, x)
 
     def test_exp(self):
         x = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
@@ -268,27 +329,6 @@ class OperatorsTest(unittest.TestCase):
             self.unravel_params(params, x, k)
             return ag.convolve2d_transpose(x, k, padding=1, outer_padding=1)
         self.numeric_check(forward, x, k)
-
-    def test_vstack(self):
-        np.random.seed(1)
-        x1 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
-        x2 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
-        x3 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
-        x4 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x1, x2, x3, x4)
-            d1 = x1 + x2
-            d2 = x3 * x4
-            return ag.vstack(d1, d2)
-        self.numeric_check(forward, x1, x2, x3, x4)
-
-    def test_vsplit(self):
-        np.random.seed(1)
-        x1 = ag.Tensor(np.random.rand(10, 3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x1)
-            return ag.vsplit(x1, 5)
-        self.numeric_check(forward, x1)
 
     def test_broadcast(self):
         np.random.seed(1)
