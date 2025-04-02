@@ -39,22 +39,6 @@ def toposort(end_node):
             else:
                 child_counts[parent] -= 1
 
-def grad(node: "Tensor", outGrad=None):
-    node_to_grads = defaultdict(list)
-
-    if outGrad is None:
-        outGrad = np.ones(node.value().shape, dtype=np.float64)
-    node_to_grads[node.id] = [outGrad]
-    
-    for v in toposort(node):
-        dy_dv = sum(node_to_grads[v.id])
-        if v.requires_grad:
-            v.grad = dy_dv
-        dy_dp = v.gradients(dy_dv)
-        for pi, p in enumerate(v.inputs):
-            node_to_grads[p.id].append(dy_dp[pi])        
-    return node_to_grads
-
 def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progress=False):    
     numericGradients = np.zeros(len(params))
     for param in range(len(params)):

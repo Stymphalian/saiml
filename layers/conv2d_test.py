@@ -45,11 +45,10 @@ class TestConvs(unittest.TestCase):
                 [0.3,0.2,0.1],
             ]
         ])
-        pred.backward(dEdY)
-        dEdX = X.grad
-        dEdW = layer.W[0].grad
-        dEdb = layer.b[0].grad
-
+        pred.backward(ag.Tensor(dEdY))
+        dEdX = X.grad.value()
+        dEdW = layer.W[0].grad.value()
+        dEdb = layer.b[0].grad.value()
         
         want_dEdW = np.array([[
             [5.3,8.6,6.1],

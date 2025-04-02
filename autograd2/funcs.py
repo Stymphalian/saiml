@@ -24,8 +24,9 @@ class TensorConvolve2D(Operator):
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         kernel = node.inputs[1].value()
-        return conv.convolve2d_gradient(
-            x, kernel, outGrad, self.stride, self.padding, self.dilate)
+        dx, dk = conv.convolve2d_gradient(
+            x, kernel, outGrad.value(), self.stride, self.padding, self.dilate)
+        return Tensor(dx), Tensor(dk)
     
 class TensorConvolve2DTranspose(Operator):
     def __init__(self, stride, padding, outer_padding):
@@ -47,8 +48,10 @@ class TensorConvolve2DTranspose(Operator):
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         kernel = node.inputs[1].value()
-        return conv.convolve2d_transpose_gradient(
-            x, kernel, outGrad, self.stride, self.padding, self.outer_padding)
+        dy = outGrad.value()
+        dx, dk = conv.convolve2d_transpose_gradient(
+            x, kernel, dy, self.stride, self.padding, self.outer_padding)
+        return Tensor(dx), Tensor(dk)
 
 from loss import cross_entropy_loss as loss_cross_entropy_loss
 from loss import cross_entropy_loss_derivative as loss_cross_entropy_loss_derivative
@@ -73,31 +76,38 @@ class TensorCrossEntropyLoss(Operator):
 
 def _positive_sigmoid(x):
     return 1 / (1 + np.exp(-x))
-def _positive_sigmoid_derivative(x):
-    s = _positive_sigmoid(x)
-    return (s * (1 - s))
-def _negative_sigmoid(x):
-    return np.exp(x) / (1 + np.exp(x))
-def _negative_sigmoid_derivative(x):
-    s = _negative_sigmoid(x)
-    return (s * (1 - s))
+def _positive_sigmoid_derivative(x: Tensor):
+    # s = _positive_sigmoid(x)
+    one = ag.Tensor(1)
+    s =  one / ( one + ag.exp(-x))
+    return (s * (ag.Tensor(1) - s))
+# def _negative_sigmoid(x):
+#     return np.exp(x) / (1 + np.exp(x))
+# def _negative_sigmoid_derivative(x: Tensor):
+#     s = _negative_sigmoid(x)
+#     return (s * (1 - s))
 class TensorSigmoid(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        y = np.where(
-            x >= 0,
-            _positive_sigmoid(x),
-            _negative_sigmoid(x)
-        )
+        y = _positive_sigmoid(x)
         return y
+        # x = inputs[0].value()
+        # y = np.where(
+        #     x >= 0,
+        #     _positive_sigmoid(x),
+        #     _negative_sigmoid(x)
+        # )
+        # return y
     def gradients(self, node, outGrad):
-        x = node.inputs[0].value()
-        dx = np.where(
-            x >= 0,
-            _positive_sigmoid_derivative(x) * outGrad,
-            _negative_sigmoid_derivative(x) * outGrad
-        )
-        return dx
+        x = node.inputs[0]
+        return _positive_sigmoid_derivative(x) * outGrad
+        # x = node.inputs[0].value()
+        # dx = np.where(
+        #     x >= 0,
+        #     _positive_sigmoid_derivative(x) * outGrad,
+        #     _negative_sigmoid_derivative(x) * outGrad
+        # )
+        # return dx
     
 class TensorMaxPool(Operator):
     def __init__(self, kernel_size, stride, padding):
@@ -109,7 +119,9 @@ class TensorMaxPool(Operator):
         return conv.max_pool2d(x, self.kernel_size, self.stride, self.padding)
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
-        return conv.max_pool2d_gradient(x, self.kernel_size, outGrad, self.stride, self.padding)
+        dy = outGrad.value()
+        dx = conv.max_pool2d_gradient(x, self.kernel_size, dy, self.stride, self.padding)
+        return Tensor(dx)
 
 # from loss import (
 #     softmax_internal,
@@ -128,7 +140,7 @@ class TensorMaxPool(Operator):
 def mean_square_error(y_pred, y_true):
     return ag.mean(ag.power(y_true - y_pred, 2))
 def cross_entropy_loss(y_pred, y_true):
-    return -ag.sum(y_true * ag.log(y_pred))
+    return -ag.summation(y_true * ag.log(y_pred))
 def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
     return TensorConvolve2D(stride, padding, dilate).tensor(x, kernel)
 def convolve2d_transpose(x, kernel, stride=1, padding=0, outer_padding=0):
@@ -141,7 +153,7 @@ def softplus(x):
 def softmax(x):
     shiftx = x - ag.max(x)
     exps = ag.exp(shiftx)
-    return exps / ag.sum(exps)
+    return exps / ag.summation(exps)
 def relu(x):
     return (x + ag.norm(x)) / 2.0
 def max_pool2d(x, kernel_size, stride=1, padding=0):

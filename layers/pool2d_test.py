@@ -88,7 +88,7 @@ class TestPool(unittest.TestCase):
             [0.3, 0.4]
         ]).reshape(1,2,2)
         pred = layer.forward(x)
-        pred.backward(dEdY)
+        pred.backward(ag.Tensor(dEdY))
 
         want = np.array([
             [0,0,0],
@@ -96,7 +96,7 @@ class TestPool(unittest.TestCase):
             [0,0,0]
         ]).reshape(1,3,3)
         self.assertEquals(x.grad.shape, (1,3,3))
-        self.assertTrue(np.allclose(x.grad, want))
+        self.assertTrue(np.allclose(x.grad.value(), want))
 
     def test_pool2d_average_backward(self):
         layer = Pool((1,3,3), mode=Pool.AVERAGE, kernel_size=2)
@@ -110,14 +110,14 @@ class TestPool(unittest.TestCase):
             [0.3, 0.4]
         ]).reshape(1,2,2)
         y = layer.forward(x)
-        y.backward(dEdY)
+        y.backward(ag.Tensor(dEdY))
         
         want = np.array([
             [0.025, 0.075, 0.05],
             [0.1, 0.25, 0.15],
             [0.075, 0.175, 0.1]
         ]).reshape(1,3,3)
-        got = x.grad
+        got = x.grad.value()
         self.assertEquals(got.shape, (1,3,3))
         self.assertTrue(np.allclose(got, want))
 
@@ -140,7 +140,7 @@ class TestPool(unittest.TestCase):
             ]
         ]).reshape(2,5,5), requires_grad=True)
         got_pred = layer.forward(x)
-        got_pred.backward(np.ones(got_pred.shape)*0.1)
+        got_pred.backward(ag.Tensor(np.ones(got_pred.shape)*0.1))
 
         want_pred = np.array([
             [
@@ -172,7 +172,7 @@ class TestPool(unittest.TestCase):
         self.assertEquals(got_pred.shape, want_pred.shape)
         self.assertEquals(x.grad.shape, want_grad.shape)
         self.assertTrue(np.allclose(got_pred.value(), want_pred))
-        self.assertTrue(np.allclose(x.grad, want_grad))
+        self.assertTrue(np.allclose(x.grad.value(), want_grad))
 
     def test_pool2d_average_full(self):
         layer = Pool((1,5,5), mode=Pool.AVERAGE, kernel_size=3, stride=2)
@@ -184,7 +184,7 @@ class TestPool(unittest.TestCase):
             [3,3,3,3,3],
         ]).reshape(1,5,5), requires_grad=True)
         got_pred = layer.forward(x)
-        got_pred.backward(np.ones(got_pred.shape)*0.1)
+        got_pred.backward(ag.Tensor(np.ones(got_pred.shape)*0.1))
         got_grad = x.grad
 
         want_pred = np.array([
@@ -202,7 +202,7 @@ class TestPool(unittest.TestCase):
         self.assertEquals(got_pred.shape, want_pred.shape)
         self.assertEquals(got_grad.shape, want_grad.shape)
         self.assertTrue(np.allclose(got_pred.value(), want_pred))
-        self.assertTrue(np.allclose(got_grad, want_grad))
+        self.assertTrue(np.allclose(got_grad.value(), want_grad))
 
 if __name__ == '__main__':
     unittest.main()

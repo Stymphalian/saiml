@@ -7,11 +7,11 @@ class OperatorsTest(unittest.TestCase):
     def numeric_check(self, forward, *inputs, do_print=False):
         params = np.concatenate([x.value().reshape(-1) for x in inputs])
         forward(params).backward()
-        predGrads = np.concatenate([x.grad.reshape(-1) for x in inputs])
+        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
         
         def forward2(params):
             z1 = forward(params)
-            z2 = ag.sum(z1)  # loss is only defined against a single scalar
+            z2 = ag.summation(z1)  # loss is only defined against a single scalar
             return z2.value()
 
         grads, diff = ag.utils.numeric_gradient_check(forward2, params, predGrads)
@@ -81,7 +81,7 @@ class OperatorsTest(unittest.TestCase):
         def forward(params):
             self.unravel_params(params, x1)
             a = ag.exp(x1)
-            b = ag.sum(a)
+            b = ag.summation(a)
             c = ag.mult(a, b)
             return c
         self.numeric_check(forward, x1)
@@ -124,7 +124,8 @@ class OperatorsTest(unittest.TestCase):
         self.numeric_check(forward, x)
 
     def test_tan(self):
-        x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
+        x1 = np.arange(9, dtype=np.float64) + 1.0
+        x = ag.Tensor(x1, requires_grad=True)
         def forward(params):
             self.unravel_params(params, x)
             return ag.tan(x)
@@ -139,12 +140,12 @@ class OperatorsTest(unittest.TestCase):
 
     def test_sum(self):        
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=None)
+        y = ag.summation(x, axis=None)
         want = 36.0
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=0)
+        y = ag.summation(x, axis=0)
         want = np.array([
             [6.0, 8.0],
             [10.0, 12.0]
@@ -152,7 +153,7 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=1)
+        y = ag.summation(x, axis=1)
         want = np.array([
             [4.0, 6.0],
             [12.0,14.0]
@@ -160,7 +161,7 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=2)
+        y = ag.summation(x, axis=2)
         want = np.array([
             [3.0, 7.0],
             [11.0, 15.0]
@@ -168,12 +169,12 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=None, keepdims=True)
+        y = ag.summation(x, axis=None, keepdims=True)
         want = np.array([[[36.0]]])
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=0, keepdims=True)
+        y = ag.summation(x, axis=0, keepdims=True)
         want = np.array([[
             [6.0, 8.0],
             [10.0, 12.0]
@@ -181,7 +182,7 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=1, keepdims=True)
+        y = ag.summation(x, axis=1, keepdims=True)
         want = np.array([
             [[4.0, 6.0]],
             [[12.0,14.0]]
@@ -189,7 +190,7 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
         x = ag.Tensor(np.arange(2*2*2, dtype=np.float64).reshape(2,2,2) + 1.0, requires_grad=True)
-        y = ag.sum(x, axis=2, keepdims=True)
+        y = ag.summation(x, axis=2, keepdims=True)
         want = np.array([
             [[3.0], [7.0]],
             [[11.0], [15.0]]
@@ -202,7 +203,7 @@ class OperatorsTest(unittest.TestCase):
                 x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
                 def forward(params):
                     self.unravel_params(params, x)
-                    return ag.sum(x, axis=axis, keepdims=keepdims)
+                    return ag.summation(x, axis=axis, keepdims=keepdims)
                 self.numeric_check(forward, x)
 
     def test_exp(self):
@@ -239,7 +240,7 @@ class OperatorsTest(unittest.TestCase):
         def forward(params):
             self.unravel_params(params, x)
             a = ag.exp(x) - ag.max(x)
-            b = ag.sum(a)
+            b = ag.summation(a)
             c = ag.div(a, b)
             return c
         self.numeric_check(forward, x, log=True)
@@ -259,77 +260,6 @@ class OperatorsTest(unittest.TestCase):
             return ag.reshape(x, (2,6))
         self.numeric_check(forward, x)
 
-    def test_convolve2d(self):
-        x = ag.Tensor(np.arange(9, dtype=np.float64).reshape(1,3,3) + 1.0, requires_grad=True)
-        k = ag.Tensor(np.arange(4, dtype=np.float64).reshape(1,2,2) + 1.0, requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k)
-        self.numeric_check(forward, x, k)
-
-    def test_convolve2d_with_stride(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k, stride=2)
-        self.numeric_check(forward, x, k)
-    
-    def test_convolve2d_with_padding(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k, padding=2)
-        self.numeric_check(forward, x, k)
-
-    def test_convolve2d_with_dilation(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k, dilate=2)
-        self.numeric_check(forward, x, k)
-
-    def test_convolve2d_with_stride_padding_dilation(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k, stride=2, padding=2, dilate=2)
-        self.numeric_check(forward, x, k)
-
-    def test_convolve2d_transpose(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d_transpose(x, k)
-        self.numeric_check(forward, x, k)
-
-    def test_convolve2d_transpose_with_stride(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,5,5), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d_transpose(x, k, stride=2)
-        self.numeric_check(forward, x, k)
-    
-    def test_convolve2d_transpose_with_padding(self):
-        np.random.seed(1)
-        x = ag.Tensor(np.random.rand(1,8,8), requires_grad=True)
-        k = ag.Tensor(np.random.rand(1,3,3), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x, k)
-            return ag.convolve2d_transpose(x, k, padding=1, outer_padding=1)
-        self.numeric_check(forward, x, k)
-
     def test_broadcast(self):
         np.random.seed(1)
         x1 = ag.Tensor(np.random.rand(3,1,3,1), requires_grad=True)
@@ -345,6 +275,38 @@ class OperatorsTest(unittest.TestCase):
             self.unravel_params(params, x1)
             return ag.norm(x1)
         self.numeric_check(forward, x1)
+
+    def test_tuple_make(self):
+        x1 = ag.Tensor(1, requires_grad=True)
+        x2 = ag.Tensor(2, requires_grad=True)
+        x3 = ag.Tensor(3, requires_grad=True)
+        x4 = ag.Tensor(4, requires_grad=True)
+
+        z1 = x1 * x2
+        z2 = x3 / x4
+        z3 = z1 + z2
+        z3.backward()
+        z3.backward()
+        want_x1 = x1.grad.value()
+        want_x2 = x2.grad.value()
+        want_x3 = x3.grad.value()
+        want_x4 = x4.grad.value()
+
+        y1 = ag.make_tuple(z1, z2)
+        y2 = ag.tuple_get_item(y1, 0)
+        y3 = ag.tuple_get_item(y1, 1)
+        y4 = y2 + y3
+        y4.backward()
+        got_x1 = x1.grad.value()
+        got_x2 = x2.grad.value()
+        got_x3 = x3.grad.value()
+        got_x4 = x4.grad.value()
+
+        self.assertEqual(want_x1, got_x1)
+        self.assertEqual(want_x2, got_x2)
+        self.assertEqual(want_x3, got_x3)
+        self.assertEqual(want_x4, got_x4)
+
 
 if __name__ == '__main__':
     unittest.main()

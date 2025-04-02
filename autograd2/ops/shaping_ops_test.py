@@ -7,11 +7,11 @@ class ShapingOperatorsTest(unittest.TestCase):
     def numeric_check(self, forward, *inputs, do_print=False):
         params = np.concatenate([x.value().reshape(-1) for x in inputs])
         forward(params).backward()
-        predGrads = np.concatenate([x.grad.reshape(-1) for x in inputs])
+        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
         
         def forward2(params):
             z1 = forward(params)
-            z2 = ag.sum(z1)  # loss is only defined against a single scalar
+            z2 = ag.summation(z1)  # loss is only defined against a single scalar
             return z2.value()
 
         grads, diff = ag.utils.numeric_gradient_check(forward2, params, predGrads)
@@ -84,7 +84,7 @@ class ShapingOperatorsTest(unittest.TestCase):
         x = np.random.rand(2,3,4)
         x1 = ag.Tensor(x, requires_grad=True)
         got = ag.repeat(x1, 2, axis=1)
-        got.backward(np.array([
+        got.backward(ag.Tensor(np.array([
             [
                 [ 1,  2,  3,  4],
                 [ 1,  2,  3,  4],
@@ -101,7 +101,7 @@ class ShapingOperatorsTest(unittest.TestCase):
                 [21, 22, 23, 24],
                 [21, 22, 23, 24],
             ]
-        ]))
+        ])))
         want_grad = np.array([
             [
                 [ 2 , 4,  6,  8],
@@ -114,7 +114,7 @@ class ShapingOperatorsTest(unittest.TestCase):
                 [42, 44, 46, 48],
             ]
         ])
-        self.assertTrue(np.array_equal(x1.grad, want_grad))
+        self.assertTrue(np.array_equal(x1.grad.value(), want_grad))
 
     def test_repeat_backward(self):
         np.random.seed(1)
@@ -147,47 +147,47 @@ class ShapingOperatorsTest(unittest.TestCase):
         
         # test repeat 2, should expand to (1,1,2)
         y = ag.tile(x1, 2)
-        y.backward(y.value())
+        y.backward(y)
         want = np.array([
             [[0], [2]],
             [[4], [6]],
             [[8], [10]]
         ])
-        self.assertTrue(np.array_equal(x1.grad, want))
+        self.assertTrue(np.array_equal(x1.grad.value(), want))
 
         # test repeat (1,2) should expand to (1,1,2)
         y = ag.tile(x1, (1,2))
-        y.backward(y.value())
+        y.backward(y)
         want = np.array([
             [[0], [2]],
             [[4], [6]],
             [[8], [10]]
         ])
-        self.assertTrue(np.array_equal(x1.grad, want))
+        self.assertTrue(np.array_equal(x1.grad.value(), want))
 
         # test repeat (2,1,1,1)
         y = ag.tile(x1, (2,1,1,1))
-        y.backward(y.value())
+        y.backward(y)
         want = np.array([
             [[0], [2]],
             [[4], [6]],
             [[8], [10]]
         ])
-        self.assertTrue(np.array_equal(x1.grad, want))
+        self.assertTrue(np.array_equal(x1.grad.value(), want))
 
         # test repeat (3,1,2)
         y = ag.tile(x1, (3,1,2))
-        y.backward(y.value())
+        y.backward(y)
         want = np.array([
             [[0*3], [2*3]],
             [[4*3], [6*3]],
             [[8*3], [10*3]]
         ])
-        self.assertTrue(np.array_equal(x1.grad, want))
+        self.assertTrue(np.array_equal(x1.grad.value(), want))
 
     def test_tile_backward(self):
         np.random.seed(1)
-        x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4), requires_grad=True)
+        x1 = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x1)
             return ag.tile(x1, (2,1,1,1))
@@ -211,14 +211,14 @@ class ShapingOperatorsTest(unittest.TestCase):
         x2 = ag.Tensor(np.arange(3*4).reshape(3,4) + 12, requires_grad=True)
 
         y = ag.stack((x1, x2), axis=1)
-        y.backward(y.value())
-        self.assertTrue(np.array_equal(x1.grad, x1.value()))
-        self.assertTrue(np.array_equal(x2.grad, x2.value()))
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+        self.assertTrue(np.array_equal(x2.grad.value(), x2.value()))
 
         y = ag.stack((x1, x2))
-        y.backward(y.value())
-        self.assertTrue(np.array_equal(x1.grad, x1.value()))
-        self.assertTrue(np.array_equal(x2.grad, x2.value()))
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+        self.assertTrue(np.array_equal(x2.grad.value(), x2.value()))
 
     def test_stack_backward(self):
         np.random.seed(1)
@@ -242,6 +242,33 @@ class ShapingOperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y[0].value(), x1[:,0,:].value()))
         self.assertTrue(np.array_equal(y[1].value(), x1[:,1,:].value()))
         self.assertTrue(np.array_equal(y[2].value(), x1[:,2,:].value()))
+
+    def test_unstack_gradient(self):
+        np.random.seed(1)
+        x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4), requires_grad=True)
+        y = ag.unstack(x1, axis=0)
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+
+        y = ag.unstack(x1, axis=1)
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+
+        y = ag.unstack(x1, axis=2)
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+
+    def test_unstack_backward(self):
+        np.random.seed(1)
+        x1 = ag.Tensor(np.random.rand(2,3,4), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x1)
+            z1 = ag.unstack(x1, axis=0)
+            z2 = ag.tuple_get_item(z1, 0)
+            z3 = ag.tuple_get_item(z1, 1)
+            z4 = z2 + z3
+            return z4
+        self.numeric_check(forward, x1)
     
     def test_concatenate(self):
         np.random.seed(1)
@@ -259,10 +286,10 @@ class ShapingOperatorsTest(unittest.TestCase):
         x2 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
 
         for axis in [None, 0, 1]:
-            y = ag.concatenate((x1,x2), axis=None)
-            y.backward(y.value())
-            self.assertTrue(np.array_equal(x1.grad, x1.value()))
-            self.assertTrue(np.array_equal(x2.grad, x2.value()))
+            y = ag.concatenate((x1,x2), axis=axis)
+            y.backward(y)
+            self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
+            self.assertTrue(np.array_equal(x2.grad.value(), x2.value()))
 
     def test_concatenate_backward(self):
         np.random.seed(1)
@@ -298,25 +325,30 @@ class ShapingOperatorsTest(unittest.TestCase):
         np.random.seed(1)
         x1 = ag.Tensor(np.arange(2*5*1).reshape(5,2,1), requires_grad=True)
         y = ag.split(x1, 5, axis=0)
-        y.backward(y.value())
-        self.assertTrue(np.array_equal(x1.grad, x1.value()))
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
 
         x1 = ag.Tensor(np.arange(2*5*1).reshape(2,5,1), requires_grad=True)
         y = ag.split(x1, 5, axis=1)
-        y.backward(y.value())
-        self.assertTrue(np.array_equal(x1.grad, x1.value()))
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
 
         x1 = ag.Tensor(np.arange(2*5*1).reshape(2,1,5), requires_grad=True)
         y = ag.split(x1, 5, axis=2)
-        y.backward(y.value())
-        self.assertTrue(np.array_equal(x1.grad, x1.value()))
+        y.backward(y)
+        self.assertTrue(np.array_equal(x1.grad.value(), x1.value()))
 
     def test_split_backward(self):
         np.random.seed(1)
         x1 = ag.Tensor(np.random.rand(10,3,3), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x1)
-            return ag.split(x1, 5)
+
+            z1 = ag.split(x1, 5)
+            z2 = ag.tuple_get_item(z1, 0)
+            z3 = ag.tuple_get_item(z1, 1)
+            z4 = z2 + z3
+            return z4
         self.numeric_check(forward, x1)
 
     def test_vstack(self):
@@ -337,7 +369,11 @@ class ShapingOperatorsTest(unittest.TestCase):
         x1 = ag.Tensor(np.random.rand(10, 3,3), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x1)
-            return ag.vsplit(x1, 5)
+            z1 = ag.vsplit(x1, 5)
+            z2 = ag.tuple_get_item(z1, 0)
+            z3 = ag.tuple_get_item(z1, 1)
+            z4 = z2 + z3
+            return z4
         self.numeric_check(forward, x1)
 
 if __name__ == '__main__':
