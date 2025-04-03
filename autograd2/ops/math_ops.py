@@ -18,19 +18,6 @@ class TensorAdd(Operator):
         assert db.shape == b.shape
         return (da, db)
 
-        # a = node.inputs[0].value()
-        # b = node.inputs[1].value()
-        # da = outGrad
-        # db = outGrad
-        # if a.shape < da.shape:
-        #     da = np.sum(da).reshape(a.shape)
-        # if b.shape < db.shape:
-        #     db = np.sum(db).reshape(b.shape)
-        # assert da.shape == a.shape
-        # assert db.shape == b.shape
-
-        # return (da, db)
-
 class TensorAddScalar(Operator):
     def __init__(self, scalar):
         self.scalar = scalar
@@ -152,7 +139,7 @@ class TensorLog(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.log(inputs[0].value())
     def gradients(self, node, outGrad):
-        dz = mult(outGrad, Tensor(1.0) / node.inputs[0])
+        dz = mult(outGrad, 1.0 / node.inputs[0])
         assert dz.shape == node.inputs[0].shape
         return dz
     
@@ -199,8 +186,6 @@ class TensorSum(Operator):
                 outGradShape[self.axis] = 1
             outGrad = outGrad.reshape(tuple(outGradShape))
         dz = broadcast(outGrad, x.shape)
-        # dz = np.ones(x.shape)
-        # dz = np.multiply(outGrad, dz)
         assert dz.shape == x.shape
         return dz
     
@@ -228,7 +213,10 @@ class TensorPower(Operator):
         super().__init__(*args, **kwargs)
         self.power = power
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.power(inputs[0].value(), self.power)
+        if self.power < 0:
+            return 1.0 / np.power(inputs[0].value(), abs(self.power))
+        else:
+            return np.power(inputs[0].value(), self.power)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         dx = power(x, self.power - 1) * self.power
@@ -270,14 +258,16 @@ class TensorNorm(Operator):
 #################################################
 
 class TensorTupleMake(Operator):
-    def compute(self, *inputs: Tuple[Tensor]):
-        return tuple([x.value() for x in inputs])
+    def compute(self, *inputs: Tuple[Tensor]) -> Union[np.ndarray, Tuple[np.ndarray]]:
+        assert len(inputs) > 0
+        assert isinstance(inputs[0], Tensor)
+        return tuple(inputs)
     
     def gradients(self, node, outGrad):
         assert isinstance(outGrad, TensorTuple)
         dx = [x for x in outGrad]
         assert len(dx) == len(node.inputs)
-        return (*dx,)
+        return tuple(dx)
 
 class TensorTupleGetItem(Operator):
     def __init__(self, index):
@@ -291,11 +281,10 @@ class TensorTupleGetItem(Operator):
         assert isinstance(inputs[0].value(), (list, tuple))
         assert isinstance(inputs[0].value()[self.index], Tensor)
 
-        x = inputs[0].value()
-        return x[self.index].value()
-        # return inputs[0].value()[self.index].value()
+        x_tuple = inputs[0].value()
+        return x_tuple[self.index].value()
 
-    def gradients(self, node, outGrad):
+    def gradients(self, node, outGrad: Tensor):
         x = node.inputs[0]
         assert isinstance(x, TensorTuple)
         assert isinstance(outGrad, Tensor)
@@ -310,7 +299,83 @@ class TensorTupleGetItem(Operator):
         assert len(dx) == len(x)
         return make_tuple(*dx)
     
+class TensorTupleGetSlice(Operator):
+    def __init__(self, index_slice):
+        assert isinstance(index_slice, slice)
+        self.slice = index_slice
 
+    def compute(self, *inputs: Tuple[TensorTuple]):
+        # TODO: How to handle input of tensorTuples
+        assert len(inputs) == 1
+        assert isinstance(inputs[0], TensorTuple)
+        assert isinstance(inputs[0].value(), (list, tuple))
+        assert isinstance(inputs[0].value()[0], Tensor)
+
+        x = inputs[0].value() # list/tuple
+        return tuple(x[self.slice])
+
+    def gradients(self, node, outGrad):
+        x = node.inputs[0]
+        assert isinstance(x, TensorTuple)
+        assert isinstance(outGrad, TensorTuple)
+        
+        dx = []
+        for i in range(len(x)):
+            zero = Tensor(np.zeros(x[i].shape))
+            dx.append(zero)
+        for i, d in enumerate(outGrad[self.slice]):
+            dx[i] = d
+
+        assert len(dx) == len(x)
+        return make_tuple(*dx)
+
+# class TensorTupleAdd(Operator):
+#     def compute(self, *inputs: Tuple[TensorTuple]):
+#         assert len(inputs) == 2
+#         assert isinstance(inputs[0], TensorTuple)
+#         assert isinstance(inputs[1], TensorTuple)
+#         a = inputs[0]
+#         b = inputs[1]
+
+#         y = [a1 + b1 for a1,b1 in zip(a.value(), b.value())]
+#         return tuple(y)
+
+#     def gradients(self, node, outGrad):
+#         da = outGrad
+#         db = outGrad
+#         return (da, db)
+
+class TensorTupleSum(Operator):
+    def compute(self, *inputs: Tuple[TensorTuple]):
+        assert len(inputs) >= 1
+        assert isinstance(inputs[0], TensorTuple)
+
+        y = None
+        for t in inputs:
+            if y is None:
+                y = list(t.value())
+            else:
+                for i, tensor in enumerate(t.value()):
+                    y[i] += tensor
+        return tuple(y)
+
+    def gradients(self, node, outGrad: TensorTuple):
+        assert isinstance(outGrad, TensorTuple)
+        dz = []
+        for _ in range(len(node.inputs)):
+            dz.append(outGrad)
+        return tuple(dz)
+            
+def make_tuple(*input):
+    return TensorTupleMake().tensor_tuple(*input)
+def tuple_get_item(x, index):
+    return TensorTupleGetItem(index).tensor(x)
+def tuple_get_slice(x, slice):
+    return TensorTupleGetSlice(slice).tensor_tuple(x)
+# def tuple_add(a, b):
+#     return TensorTupleAdd().tensor_tuple(a, b)
+def tuple_sum(*inputs):
+    return TensorTupleSum().tensor_tuple(*inputs)
 
 #################################################
 # SHAPING OPERATIONS
@@ -440,7 +505,7 @@ class TensorStack(Operator):
     def __init__(self, axis=0):
         self.axis = axis
 
-    def compute(self, *inputs: Tuple[TensorTuple]):
+    def compute(self, *inputs: Tuple[TensorTuple]) -> Tensor:
         assert len(inputs) == 1
         assert isinstance(inputs[0], TensorTuple)
         ref_shape = inputs[0][0].shape
@@ -451,18 +516,14 @@ class TensorStack(Operator):
         y = np.stack(flat, axis=self.axis)
         return y
 
-    def gradients(self, node, outGrad):
+    def gradients(self, node, outGrad: Tensor):
         assert isinstance(outGrad, Tensor)
         assert isinstance(node.inputs[0], TensorTuple)
         x = node.inputs[0]
-        x_shape = x[0].shape
         dx = unstack(outGrad, axis=self.axis)
-        # dx = split(outGrad, len(x), axis=self.axis)
-        # dx = [reshape(a, x_shape) for a in dx]
 
         assert len(dx) == len(x)
-        return make_tuple(*dx)
-        # return tuple(dx)
+        return dx
     
 class TensorUnstack(Operator):
     def __init__(self, axis=0):
@@ -471,7 +532,7 @@ class TensorUnstack(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         assert isinstance(inputs[0], Tensor)
         y = np.unstack(inputs[0].value(), axis=self.axis)
-        return y
+        return tuple(Tensor(a) for a in y)
 
     def gradients(self, node, outGrad):
         dx = stack(outGrad, axis=self.axis)
@@ -481,52 +542,48 @@ class TensorConcatenate(Operator):
     def __init__(self, axis=None):
         self.axis = axis
 
-    def compute(self, *inputs: Tuple[TensorTuple]):
+    def compute(self, *inputs: Tuple[TensorTuple]) -> np.ndarray:
         a = [x.value() for x in inputs[0]]
         y = np.concatenate(a, axis=self.axis)
         return y
 
-    def gradients(self, node, outGrad):
+    def gradients(self, node, outGrad:Tensor) -> TensorTuple:
         assert isinstance(outGrad, Tensor)
         x = node.inputs[0]
         if self.axis is None:
             x_shape = x[0].shape
             dx = split(outGrad, len(x), axis=0)
             dx = [reshape(a, x_shape) for a in dx]
+            assert len(dx) == len(x)
+            return make_tuple(*dx)            
         else:
             dx = split(outGrad, len(x), axis=self.axis)
-
-        assert len(dx) == len(x)
-        return make_tuple(*dx)
+            assert len(dx) == len(x)
+            return dx
     
 class TensorSplit(Operator):
     def __init__(self, num_splits, axis=0):
         self.num_splits = num_splits
         self.axis = axis
 
-    def compute(self, *inputs: Tuple[Tensor]):
+    def compute(self, *inputs: Tuple[Tensor]) -> Tuple[Tensor]:
         x = inputs[0].value()
-        out = np.split(x, self.num_splits, axis=self.axis)
-        assert len(out) == self.num_splits
-        return out
+        y = np.split(x, self.num_splits, axis=self.axis)
+        assert len(y) == self.num_splits
+        return tuple([Tensor(a) for a in y])
 
     def gradients(self, node, outGrad):
         assert isinstance(outGrad, TensorTuple)
         assert len(outGrad) == self.num_splits
         x = node.inputs[0].value()
 
-        # dy = [y for y in outGrad]
-        # dy_shape = dy[0].shape
-        # out = split(dy, self.num_splits, axis=0)
-
-        # dy_shape = outGrad[0].shape
-        # out = [reshape(a, dy_shape[1:]) for a in outGrad]
         out = [a for a in outGrad]
         dx = stack(out, axis=self.axis)
         dx = reshape(dx, x.shape)
 
         assert dx.shape == x.shape, f"dx shape: {dx.shape}, x shape: {x.shape}"
         return dx
+
 
 def constant(a):
     return Tensor(a, requires_grad=False)
@@ -571,14 +628,6 @@ def neg(a):
 def norm(a):
     return TensorNorm().tensor(a)
 
-
-
-def make_tuple(*input):
-    return TensorTupleMake().tensor_tuple(*input)
-
-def tuple_get_item(x, index):
-    return TensorTupleGetItem(index).tensor(x)
-
 def reshape(a, shape):
     return TensorReshape(shape).tensor(a)
 def broadcast(a, shape):
@@ -593,11 +642,11 @@ def stack(inputs: List[Tensor], axis=0):
     return TensorStack(axis=axis).tensor(make_tuple(*inputs))
 def unstack(a, axis=0):
     return TensorUnstack(axis=axis).tensor_tuple(a)
-def concatenate(inputs, axis=None):
+def concatenate(inputs: Sequence[Tensor], axis=None):
     return TensorConcatenate(axis).tensor(make_tuple(*inputs))
 def split(a, num_splits, axis=0):
     return TensorSplit(num_splits, axis).tensor_tuple(a)
-def vstack(arr):
+def vstack(arr: Sequence[Tensor]):
     return concatenate(arr, axis=0)
 def vsplit(a, num_splits):
     return split(a, num_splits, axis=0)

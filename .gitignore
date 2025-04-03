@@ -5,3 +5,6 @@ thirdparty
 Test.ipynb
 .ipynb_checkpoints
 TODO.txt
+graphviz
+graphviz.svg
+graphviz.pdf

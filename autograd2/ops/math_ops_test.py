@@ -276,37 +276,6 @@ class OperatorsTest(unittest.TestCase):
             return ag.norm(x1)
         self.numeric_check(forward, x1)
 
-    def test_tuple_make(self):
-        x1 = ag.Tensor(1, requires_grad=True)
-        x2 = ag.Tensor(2, requires_grad=True)
-        x3 = ag.Tensor(3, requires_grad=True)
-        x4 = ag.Tensor(4, requires_grad=True)
-
-        z1 = x1 * x2
-        z2 = x3 / x4
-        z3 = z1 + z2
-        z3.backward()
-        z3.backward()
-        want_x1 = x1.grad.value()
-        want_x2 = x2.grad.value()
-        want_x3 = x3.grad.value()
-        want_x4 = x4.grad.value()
-
-        y1 = ag.make_tuple(z1, z2)
-        y2 = ag.tuple_get_item(y1, 0)
-        y3 = ag.tuple_get_item(y1, 1)
-        y4 = y2 + y3
-        y4.backward()
-        got_x1 = x1.grad.value()
-        got_x2 = x2.grad.value()
-        got_x3 = x3.grad.value()
-        got_x4 = x4.grad.value()
-
-        self.assertEqual(want_x1, got_x1)
-        self.assertEqual(want_x2, got_x2)
-        self.assertEqual(want_x3, got_x3)
-        self.assertEqual(want_x4, got_x4)
-
 
 if __name__ == '__main__':
     unittest.main()

@@ -73,8 +73,8 @@ class Module:
     def get_params_and_grads(self):
         params = self.unpack_params()
         flat_params = [p.value().reshape(-1) for p in params]
-        grads = [x.grad.reshape(-1) for x in params]
-        return np.concatenate(flat_params), np.concatenate(grads)
+        grads = [x.grad.value().reshape(-1) for x in params]
+        return (np.concatenate(flat_params), np.concatenate(grads))
     
     def set_params(self, flat_params):
         _pack_params(self.params, flat_params)

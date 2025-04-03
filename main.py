@@ -68,6 +68,39 @@ class AutoEncoder(Module):
         self.encoder.backward(context)
     
 def main():
+    x1 = ag.Parameter(np.arange(4).reshape(2,2) + 1).set_name("x1")
+    x2 = ag.Parameter(np.arange(4).reshape(2,2) + 1).set_name("x2")
+    z1 = ag.log(x1) + ag.power(x1, 2) + ag.sin(x2)
+    dz1 = ag.Gradient(np.ones((2,2)))
+    z1.backward(dz1)
+
+    # x1 = ag.Parameter(5).set_name("x1")
+    # x2 = ag.Parameter(2).set_name("x2")
+    # z1 = ag.log(x1) + ag.power(x1, 2) + ag.sin(x2)
+    # dz1 = ag.Gradient(1)
+    # z1.backward(dz1)
+
+    dot = ag.generate_graphviz(x1.grad)
+    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
+
+    dot = ag.generate_graphviz(x2.grad)
+    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
+
+    dot = ag.generate_graphviz(z1)
+    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
+
+    dx1 = x1.grad
+    dx1.backward()
+    dot = ag.generate_graphviz(x1.grad)
+    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
+
+    ddx1 = x1.grad
+    ddx1.backward()
+    dot = ag.generate_graphviz(x1.grad)
+    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
+
+
+def main3():
     # input_shape = (14, 14)
     # for stride in range(1,input_shape[0]):
     #     for padding in range(3):

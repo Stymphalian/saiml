@@ -65,4 +65,4 @@ class Conv2dTranspose(Module):
                 outer_padding=self.outer_padding)
             z2 = ag.add(z1, bias)
             output.append(z2)
-        return ag.vstack(*output)
+        return ag.vstack(output)

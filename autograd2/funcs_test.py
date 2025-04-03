@@ -115,10 +115,10 @@ class OperatorsTest(unittest.TestCase):
             z1 = ag.matmul(w, x) + b
             z2 = ag.sigmoid(z1)
             z3 = ag.softmax(z2)
-            # z4 = ag.cross_entropy_loss(z3, y)
-            return z3
+            z4 = ag.cross_entropy_loss(z3, y)
+            return z4
         self.numeric_check(forward, w, b)
-
+    
     def test_relu(self):
         np.random.seed(1)
         x = ag.Tensor(np.random.rand(10), requires_grad=True)
