@@ -17,6 +17,7 @@ Conv2DLayer | Convolution layer supporting stride, padding, kernel_size and kern
 Pool2DLayer | Pooling layer supporting stride.
 Loss | cross_entropy, mean_square_error
 PCA | Principle Component Analysis for dimension reduction and feature analysis. Unoptimized and directly computes the eigen values/vectors from the covariance matrix.
+autograd | implement autograd tensors
 
 ## TODO
 Feature  | Description
@@ -24,4 +25,3 @@ Feature  | Description
 Optimizer | A general class for running an optimizer for gradient descent.
 Trainer | A class for running the training loop
 GPU | Run all the calculation on GPU
-autograd | implement autograd tensors

@@ -26,22 +26,25 @@ def preprocess_data(x, y, limit):
 class AutoEncoder(Module):
     def __init__(self):
         self.encoder = Sequence([
-            Conv2d((1,28,28), num_kernels=3, kernel_size=3, stride=2, padding=1),
+            Conv2d((1,28,28), num_kernels=32, kernel_size=3, stride=2, padding=1),
             Sigmoid(),
-            Conv2d((3,14,14), num_kernels=6, kernel_size=3, stride=2, padding=0),
+            LayerNorm(),
+            Conv2d((32,14,14), num_kernels=64, kernel_size=3, stride=2, padding=0),
             Sigmoid(),
-            Flatten(),
+            LayerNorm(),
+            Flatten()
         ])
-        self.z_mean = Dense(6*6*6, 2)
-        self.z_log_var = Dense(6*6*6, 2)
+        self.z_mean = Dense(64*6*6, 2)
+        self.z_log_var = Dense(64*6*6, 2)
         self.sampling = Sampling() # 2
         self.decoder = Sequence([
-            Dense(2, 6*6*6),
-            Reshape((6,6,6)),
-            Conv2dTranspose((6,6,6), num_kernels=3, kernel_size=3, stride=2, padding=0),
+            Dense(2, 64*6*6),
+            Reshape((64,6,6)),
+            Conv2dTranspose((64,6,6), num_kernels=32, kernel_size=3, stride=2, padding=0),
             Sigmoid(),
-            Conv2dTranspose((3,14,14), num_kernels=1, kernel_size=3, stride=2, padding=1),
-            Sigmoid()
+            LayerNorm(),
+            Conv2dTranspose((32,14,14), num_kernels=1, kernel_size=3, stride=2, padding=1),
+            Sigmoid(),
         ])
 
         self.params = [
@@ -53,11 +56,11 @@ class AutoEncoder(Module):
         ]
 
     def forward(self, x):
-        z = self.encoder.forward(x)
-        z_mean = self.z_mean.forward(z)
-        z_var = self.z_log_var.forward(z)
-        sample = self.sampling.forward(z_mean, z_var)
-        reconstruction = self.decoder.forward(sample)
+        z = self.encoder.forward(x).set_name("z")
+        z_mean = self.z_mean.forward(z).set_name("z_mean")
+        z_var = self.z_log_var.forward(z).set_name("z_var")
+        sample = self.sampling.forward(z_mean, z_var).set_name("sample")
+        reconstruction = self.decoder.forward(sample).set_name("reconstruction")
         return reconstruction, z_mean, z_var
     
     def backward(self, context):
@@ -68,39 +71,6 @@ class AutoEncoder(Module):
         self.encoder.backward(context)
     
 def main():
-    x1 = ag.Parameter(np.arange(4).reshape(2,2) + 1).set_name("x1")
-    x2 = ag.Parameter(np.arange(4).reshape(2,2) + 1).set_name("x2")
-    z1 = ag.log(x1) + ag.power(x1, 2) + ag.sin(x2)
-    dz1 = ag.Gradient(np.ones((2,2)))
-    z1.backward(dz1)
-
-    # x1 = ag.Parameter(5).set_name("x1")
-    # x2 = ag.Parameter(2).set_name("x2")
-    # z1 = ag.log(x1) + ag.power(x1, 2) + ag.sin(x2)
-    # dz1 = ag.Gradient(1)
-    # z1.backward(dz1)
-
-    dot = ag.generate_graphviz(x1.grad)
-    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
-
-    dot = ag.generate_graphviz(x2.grad)
-    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
-
-    dot = ag.generate_graphviz(z1)
-    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
-
-    dx1 = x1.grad
-    dx1.backward()
-    dot = ag.generate_graphviz(x1.grad)
-    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
-
-    ddx1 = x1.grad
-    ddx1.backward()
-    dot = ag.generate_graphviz(x1.grad)
-    dot.render('graphviz', view=True, format="svg", overwrite_source=True)
-
-
-def main3():
     # input_shape = (14, 14)
     # for stride in range(1,input_shape[0]):
     #     for padding in range(3):
@@ -141,67 +111,113 @@ def main3():
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         ], dtype=np.float64)
     y_train = np.array([0, 1.0], dtype=np.float64)
-    x_train = ag.Tensor(x_train.reshape(1, 28, 28), requires_grad=True)
-    y_train = ag.Tensor(y_train.reshape(2, 1))
+    x_train = ag.Parameter(x_train.reshape(1, 28, 28), requires_grad=True)
+    # y_train = ag.Parameter(y_train.reshape(2, 1))
+    y_train = ag.Parameter(np.identity(10, dtype=np.float64)[2].reshape(10, 1))
 
     np.random.seed(1)
     encoder = AutoEncoder()
-    
-    def calculate_loss(x, z_log_var, z_mean, y):
-        # reconstruction loss
-        reconstruction_loss = ag.mean_square_error(x, y)
 
-        # kl-divergence loss (probability distribution loss)
-        kl_loss = -0.5 * (1 + z_log_var - ag.power(z_mean, 2) - ag.exp(z_log_var))
-        kl_loss = ag.mean(kl_loss)
-
-        total_loss = reconstruction_loss + kl_loss
-        return total_loss
-    
-    x, z_log_var, z_mean = encoder.forward(x_train)
-    loss = calculate_loss(x, z_log_var, z_mean, x_train)
-    loss.backward()
+    # def calculate_loss(x, y):
+    #     return ag.cross_entropy_loss(x, y)
+    # y, _, _ = encoder.forward(x_train)
+    # loss = calculate_loss(y, y_train)
+    # loss.backward()
+    # dot = ag.generate_graphviz(loss)
+    # dot.render("graphviz", view=True, format="svg")
 
     # for learning_rate, num_iterations in [(0.1, 1000), (0.01, 1000), (0.0001, 3000)]:
     #     context = {"learning_rate": learning_rate}
     #     print("Learning rate: ", learning_rate)
     #     for epoc in range(num_iterations):
-    #         x, z_log_var, z_mean = encoder.forward(x_train)
-    #         loss = calculate_loss(x, z_log_var, z_mean, x_train)
+    #         y, _, _ = encoder.forward(x_train)
+    #         loss = calculate_loss(y, y_train)
     #         loss.backward()
     #         encoder.backward(context)
     #         if epoc % 1000 == 0:
+    #             print(y)
     #             print(loss)
     
-    # import matplotlib.pyplot as plt
-    # plt.imshow(x.value().reshape(28, 28), cmap='gray')
-    # plt.show()
+    def calculate_loss(x, z_log_var, z_mean, y):
+        # reconstruction loss
+        reconstruction_loss = ag.mean_square_error(x, y)
+        reconstruction_loss.set_name("reconstruction_loss")
+
+        # kl-divergence loss (probability distribution loss)
+        kl_loss = -0.5 * (1 + z_log_var - ag.power(z_mean, 2) - ag.exp(z_log_var))
+        kl_loss.set_name("kl_loss")
+        kl_loss = ag.mean(kl_loss)
+        kl_loss.set_name("kl_loss_mean")
+
+        total_loss = reconstruction_loss + kl_loss
+        total_loss.set_name("total_loss")
+        return total_loss
+    
+    x, z_log_var, z_mean = encoder.forward(x_train)
+    loss = calculate_loss(x, z_log_var, z_mean, x_train)
+    loss.backward()
+    dot = ag.generate_graphviz(loss)
+    dot.render("graphviz", view=True, format="svg")
+
+    # dot = ag.generate_graphviz(loss)
+    # dot.render("graphviz", view=True, format="svg")
+    # params, predGrads = encoder.get_params_and_grads()
+    # def forward(params):
+    #     encoder.set_params(params)
+    #     x, z_log_var, z_mean = encoder.forward(x_train)
+    #     loss = calculate_loss(x, z_log_var, z_mean, x_train)
+    #     return loss.value()
+    # grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads, print_progress=True)
+    # print(grad)
+    # print(predGrads)
+    # print(diffs)
+    # print(ag.Node._NODE_AUTO_ID)
+
+    # print(loss)
+
+    for learning_rate, num_iterations in [(0.001, 5000)]:
+        context = {"learning_rate": learning_rate}
+        print("Learning rate: ", learning_rate)
+        for epoc in range(num_iterations):
+            x, z_log_var, z_mean = encoder.forward(x_train)
+            loss = calculate_loss(x, z_log_var, z_mean, x_train)
+            loss.backward()
+            encoder.backward(context)
+            # print(loss)
+            if epoc % 100 == 0:
+                dot = ag.generate_graphviz(loss)
+                dot.render("graphviz", view=True, format="svg")
+                print(loss, loss.inputs[0], loss.inputs[1])
+    
+    import matplotlib.pyplot as plt
+    plt.imshow(x.value().reshape(28, 28), cmap='gray')
+    plt.show(block=True)
 
     # loss = ag.cross_entropy_loss(x, y_train)
     
 
-    model = Sequence([
-        Flatten(),
-        Dense(28*28, 10),
-        Sigmoid(),
-        Softmax()
-    ])
-    pred = model.forward(x_train)
-    y_train = ag.Tensor(utils.onehot_encode(0, 10).reshape(10, 1))
-    loss = ag.cross_entropy_loss(pred, y_train)
-    loss.backward()
+    # model = Sequence([
+    #     Flatten(),
+    #     Dense(28*28, 10),
+    #     Sigmoid(),
+    #     Softmax()
+    # ])
+    # pred = model.forward(x_train)
+    # y_train = ag.Tensor(utils.onehot_encode(0, 10).reshape(10, 1))
+    # loss = ag.cross_entropy_loss(pred, y_train)
+    # loss.backward()
     
-    params, predGrads = model.get_params_and_grads()
-    def forward(params):
-        model.set_params(params)
-        pred = model.forward(x_train)
-        loss = ag.cross_entropy_loss(pred, y_train)
-        return loss.value()
-    grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads, print_progress=True)
-    print(grad)
-    print(predGrads)
-    print(diffs)
-    print(ag.Node._NODE_AUTO_ID)
+    # params, predGrads = model.get_params_and_grads()
+    # def forward(params):
+    #     model.set_params(params)
+    #     pred = model.forward(x_train)
+    #     loss = ag.cross_entropy_loss(pred, y_train)
+    #     return loss.value()
+    # grad, diffs = ag.utils.numeric_gradient_check(forward, params, predGrads, print_progress=True)
+    # print(grad)
+    # print(predGrads)
+    # print(diffs)
+    # print(ag.Node._NODE_AUTO_ID)
 
 
 def main2():

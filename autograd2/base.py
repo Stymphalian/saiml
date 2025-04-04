@@ -345,6 +345,12 @@ def generate_graphviz(node: Tensor):
         label = "\n".join(labels)
         if isinstance(v, Parameter):
             attrs["shape"] = "doublecircle"
+
+        if isinstance(v, Tensor):
+            tooltip_value = str(np.round(v.value(),2))
+        else:
+            tooltip_value = str(v.value())
+        attrs["tooltip"] = tooltip_value
         
         dot.node(str(v.id), label, **attrs)
         for y in v.inputs:

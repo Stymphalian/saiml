@@ -52,6 +52,20 @@ class TestModule(unittest.TestCase):
         self.assertEqual(m1.w4.value()[0][2], 300)
         self.assertEqual(m2.w1.value()[0][0], 400)
 
+        # print("m1.w1", m1.w1)
+        # print("m1.w2", m1.w2)
+        # print("m1.w3", m1.w3)
+        # print("m1.w4", m1.w4)
+        # print("m1.w5", m1.w5)
+        # print("m1.w6", m1.w6)
+        # print("m2.w1", m2.w1)
+        # print("m2.w2", m2.w2)
+        # print("m2.w3", m2.w3)
+        # print("m2.w4", m2.w4)
+        # print("m2.w5", m2.w5)
+        # print("m2.w6", m2.w6)
+        
+
 
 if __name__ == '__main__':
     unittest.main()

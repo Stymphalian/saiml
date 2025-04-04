@@ -143,6 +143,7 @@ class TestConvFuncs(unittest.TestCase):
                 [0,0,0,0],
                 [0,0,0,0],
         ]])
+        print(got)
         self.assertTrue(np.array_equal(got, want))
 
     @unittest.skip("Test against torch implementation")
@@ -150,28 +151,40 @@ class TestConvFuncs(unittest.TestCase):
         stride = 0
         padding = 0
         np.random.seed(1)
-        x = np.random.rand(28, 28)
-        kernel = np.random.rand(3,3)
+        x = np.random.rand(1, 6, 6)
+        kernel = np.random.rand(1, 3,3)
         print()
         print("x shape = ", x.shape)
         print("kernel shape = ", kernel.shape)
         # y = np.random.rand(3, 3)
-        for stride in range(1, x.shape[0]):
+        for stride in range(1, x.shape[1]):
             y = utils.convolve2d(x, kernel, stride, padding)
             got = utils.convolve2d_transpose(y, kernel, stride, padding)
-            got = np.round(got, 2)
+            # got = np.round(got, 2)
 
-            y1 = torch.Tensor(y.copy().reshape((1,1) + y.shape))
-            k1 = torch.Tensor(kernel.copy().reshape((1,1) + kernel.shape))
+            y1 = torch.Tensor(y.copy().reshape((1,) + y.shape))
+            k1 = torch.Tensor(kernel.copy().reshape((1,) + kernel.shape))
             want = torch.nn.functional.conv_transpose2d(y1, k1, stride=stride, padding=padding).numpy()
+            want = want[0]
 
-            print()
-            print("stride = ", stride)
-            print("y shape = ", y.shape)
-            print("got shape = ", got.shape)
-            print("want shape = ", want.shape[2:])
-            if got.shape != x.shape:            
-                print("Not matching shape!")
+            if got.shape != x.shape:
+                continue
+            if got.shape != want.shape:
+                continue
+
+            print(stride)
+            print(got)
+            print(want)
+            self.assertTrue(np.allclose(got, want))
+
+
+            # print()
+            # print("stride = ", stride)
+            # print("y shape = ", y.shape)
+            # print("got shape = ", got.shape)
+            # print("want shape = ", want.shape[2:])
+            # if got.shape == x.shape:
+            #     print("Not matching shape!")
             
         # print(got)
         # print(want)

@@ -1,33 +1,9 @@
 import unittest
 import numpy as np
 import autograd2 as ag
+import base_gradient_test
 
-class ShapingOperatorsTest(unittest.TestCase):
-
-    def numeric_check(self, forward, *inputs, do_print=False):
-        params = np.concatenate([x.value().reshape(-1) for x in inputs])
-        forward(params).backward()
-        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
-        
-        def forward2(params):
-            z1 = forward(params)
-            z2 = ag.summation(z1)  # loss is only defined against a single scalar
-            return z2.value()
-
-        grads, diff = ag.utils.numeric_gradient_check(forward2, params, predGrads)
-        if do_print:
-            print()
-            print("numericGrads = ", grads)
-            print("predGrads    = ", predGrads)
-            print("diff         = ", diff)
-        # self.assertTrue(diff < 1e-6, "diff = {0}\ngrads= {1}".format(diff, grads))
-        self.assertTrue(diff < 1e-6, "diff = {0}\ngrads= {1}".format(diff, grads))
-
-    def unravel_params(self, params, *inputs):
-        count = 0
-        for x in inputs:
-            x._data = params[count:count+x.size].reshape(x.shape)
-            count += x.size
+class ShapingOperatorsTest(base_gradient_test.NumericalGradientTest):
 
     def test_reshape(self):
         np.random.seed(1)

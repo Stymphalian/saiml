@@ -16,8 +16,8 @@ class Conv2d(Module):
         self.stride = stride
         self.padding = padding
 
-        kernels = [np.random.normal(size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
-        bias = [np.random.normal(size=(1,1)) for x in range(self.num_kernels)]
+        kernels = [np.random.normal(scale=(2.0/(self.input_channels*kernel_size*kernel_size)), size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
+        bias = [np.random.normal(scale=2.0, size=(1,1)) for x in range(self.num_kernels)]
         self.W = [ag.Tensor(d, requires_grad=True) for d in kernels]
         self.b = [ag.Tensor(d, requires_grad=True) for d in bias]
         self.params = self.W + self.b
@@ -47,8 +47,8 @@ class Conv2dTranspose(Module):
         self.padding = padding
         self.outer_padding = outer_padding
 
-        kernels = [np.random.normal(size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
-        bias = [np.random.normal(size=(1,1)) for x in range(self.num_kernels)]
+        kernels = [np.random.normal(scale=(2.0/self.input_channels*kernel_size*kernel_size), size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
+        bias = [np.random.normal(scale=2, size=(1,1)) for x in range(self.num_kernels)]
         self.W = [ag.Tensor(d, requires_grad=True) for d in kernels]
         self.b = [ag.Tensor(d, requires_grad=True) for d in bias]
         self.params = self.W + self.b

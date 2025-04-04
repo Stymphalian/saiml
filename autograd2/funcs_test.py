@@ -1,34 +1,10 @@
 import unittest
 import numpy as np
 import autograd2 as ag
+import base_gradient_test
 
-class OperatorsTest(unittest.TestCase):
+class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
-    def numeric_check(self, forward, *inputs, threshold=1e-6, do_print=False):
-        params = np.concatenate([x.value().reshape(-1) for x in inputs])
-        y = forward(params)
-        y.backward()
-        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
-        
-        def forward2(params):
-            z1 = forward(params)
-            z2 = ag.summation(z1)  # loss is only defined against a single scalar
-            return z2.value()
-
-        grads, diff = ag.utils.numeric_gradient_check(forward2, params, predGrads)
-        if do_print:
-            print()
-            print("grads =", grads)
-            print("predGrads =", predGrads)
-            print("diff = ", diff)
-        self.assertTrue(diff < threshold, "diff = {0}\ngrads= {1}".format(diff, grads))
-        # self.assertTrue(diff < 10, "diff = {0}\ngrads= {1}".format(diff, grads))
-
-    def unravel_params(self, params, *inputs):
-        count = 0
-        for x in inputs:
-            x._data = params[count:count+x.size].reshape(x.shape)
-            count += x.size
 
     def test_sigmoid(self):
         np.random.seed(1)
@@ -197,6 +173,18 @@ class OperatorsTest(unittest.TestCase):
             self.unravel_params(params, x, k)
             return ag.convolve2d_transpose(x, k, padding=1, outer_padding=1)
         self.numeric_check(forward, x, k)
+
+    def test_variance(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(10), requires_grad=True)
+        got = ag.variance(x)
+        want = np.var(x.value())
+        self.assertEquals(got.value(), want)
+
+        def forward(params):
+            self.unravel_params(params, x)
+            return ag.variance(x)
+        self.numeric_check(forward, x)
 
 if __name__ == '__main__':
     unittest.main()

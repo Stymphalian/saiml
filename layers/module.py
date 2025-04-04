@@ -50,12 +50,10 @@ class Module:
 
     def backward(self, context):
         """Run backwards to update the gradients of all the parameters"""
-        # params = self.get_params()
-        # TODO: Fix this, this update wont' work with modules
-        # nested within the params
         learning_rate = context["learning_rate"]
         for param in self.params:
-            param._data -= learning_rate * param.grad
+            # TODO: How to integrate optimizer updates into this?
+            param._data -= learning_rate * param.grad.value()
 
     def unpack_params(self):
         return _unpack_params(self.params)
@@ -67,7 +65,7 @@ class Module:
     
     def get_grads(self):
         params = self.unpack_params()
-        grads = [x.grad.reshape(-1) for x in params]
+        grads = [x.grad.value().reshape(-1) for x in params]
         return np.concatenate(grads)
     
     def get_params_and_grads(self):

@@ -1,33 +1,9 @@
 import unittest
 import numpy as np
 import autograd2 as ag
+import base_gradient_test
 
-class OperatorsTest(unittest.TestCase):
-
-    def numeric_check(self, forward, *inputs, do_print=False):
-        params = np.concatenate([x.value().reshape(-1) for x in inputs])
-        forward(params).backward()
-        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
-        
-        def forward2(params):
-            z1 = forward(params)
-            z2 = ag.summation(z1)  # loss is only defined against a single scalar
-            return z2.value()
-
-        grads, diff = ag.utils.numeric_gradient_check(forward2, params, predGrads)
-        if do_print:
-            print()
-            print("numericGrads = ", grads)
-            print("predGrads    = ", predGrads)
-            print("diff         = ", diff)
-        # self.assertTrue(diff < 1e-6, "diff = {0}\ngrads= {1}".format(diff, grads))
-        self.assertTrue(diff < 1e-6, "diff = {0}\ngrads= {1}".format(diff, grads))
-
-    def unravel_params(self, params, *inputs):
-        count = 0
-        for x in inputs:
-            x._data = params[count:count+x.size].reshape(x.shape)
-            count += x.size
+class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
     def test_add(self):
         x1 = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
@@ -198,7 +174,7 @@ class OperatorsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(y.value(), want))
 
     def test_sum_backward(self):
-        for axis in [None, 0, 1, 2]:
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
             for keepdims in [True, False]:
                 x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
                 def forward(params):
@@ -214,11 +190,39 @@ class OperatorsTest(unittest.TestCase):
         self.numeric_check(forward, x)
 
     def test_mean(self):
-        x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x)
-            return ag.mean(x)
-        self.numeric_check(forward, x)
+        x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            z = ag.mean(x, axis=axis)
+            want = np.mean(x.value(), axis=axis)
+            self.assertTrue(np.array_equal(z.value(), want))
+
+    def test_mean_gradient(self):
+        x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        z = ag.mean(x, axis=(1,2))
+        z.backward()
+        got = x.grad.value()
+        n = 1.0 / 12.0
+        want = np.array([
+            [
+                [n, n, n, n],
+                [n, n, n, n],
+                [n, n, n, n],
+            ],
+            [
+                [n, n, n, n],
+                [n, n, n, n],
+                [n, n, n, n],
+            ]
+        ])
+        self.assertTrue(np.array_equal(got, want))
+
+    def test_mean_backward(self):
+        x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            def forward(params):
+                self.unravel_params(params, x)
+                return ag.mean(x, axis=axis)
+            self.numeric_check(forward, x)
     
     def test_power(self):
         x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
@@ -228,11 +232,19 @@ class OperatorsTest(unittest.TestCase):
         self.numeric_check(forward, x)
 
     def test_max(self):
-        x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x)
-            return ag.max(x)
-        self.numeric_check(forward, x)
+        x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        for axis in [None, 0, 1, 2]:
+            z = ag.max(x, axis=axis)
+            want = np.max(x.value(), axis=axis)
+            self.assertTrue(np.array_equal(z.value(), want))
+
+    def test_max_backward(self):
+        x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        for axis in [None,0, 1, 2]:
+            def forward(params):
+                self.unravel_params(params, x)
+                return ag.max(x, axis=axis)
+            self.numeric_check(forward, x)
 
     @unittest.skip("Numerically unstable for numeric gradient checking")
     def test_softmax(self):
@@ -270,11 +282,37 @@ class OperatorsTest(unittest.TestCase):
 
     def test_norm(self):
         np.random.seed(1)
-        x1 = ag.Tensor(np.random.rand(3,3), requires_grad=True)
+        x1 = ag.Tensor(np.random.rand(2,3,4), requires_grad=True)
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            got = ag.norm(x1, axis=axis)
+            want = np.linalg.norm(x1.value(), axis=axis)
+            self.assertTrue(np.array_equal(got.value(), want))
+
+    def test_norm_backward(self):
+        np.random.seed(1)
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            x1 = ag.Tensor(np.random.rand(2,3,4), requires_grad=True)
+            def forward(params):
+                self.unravel_params(params, x1)
+                return ag.norm(x1)
+            self.numeric_check(forward, x1)
+
+    def test_sqrt(self):
+        x1 = ag.Tensor(np.arange(9).reshape(3,3)+1, requires_grad=True)
+        got = ag.sqrt(x1)
+        want = np.sqrt(x1.value())
+        self.assertTrue(np.array_equal(got.value(), want))
+
+        got.backward()
+        got_grad = x1.grad
+        want_grad = 1.0 / (2*np.sqrt(x1.value()))
+        self.assertTrue(np.array_equal(got_grad.value(), want_grad))
+
+        x1 = ag.Tensor(np.array([4,9,16,25], dtype=np.float64).reshape(2,2), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x1)
-            return ag.norm(x1)
-        self.numeric_check(forward, x1)
+            return ag.sqrt(x1)
+        self.numeric_check(forward, x1, do_print=True)
 
 
 if __name__ == '__main__':

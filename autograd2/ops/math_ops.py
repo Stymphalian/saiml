@@ -2,6 +2,22 @@ import numpy as np
 from typing import *
 from ..base import Operator, Tensor, TensorTuple
 
+
+def get_broadcast_shape(outGrad, x, axis):
+    if outGrad.ndim < x.ndim:
+        if axis is None:
+            outGradShape = (1,)*x.ndim
+            outGradSize = x.size
+        else:
+            outGradShape = np.array(x.shape)                
+            axes = list(axis) if isinstance(axis, (list, tuple)) else [axis]
+            outGradSize = np.prod(outGradShape[axes])
+            outGradShape[axes] = 1
+    else:
+        outGradShape = outGrad.shape
+        outGradSize = outGrad.size
+    return tuple(outGradShape), outGradSize
+
 class TensorAdd(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return np.add(inputs[0].value(), inputs[1].value())
@@ -165,26 +181,22 @@ class TensorSum(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
         y = np.sum(x, axis=self.axis, keepdims=self.keepdims)
-        if self.keepdims:
-            if self.axis is None:
-                x_shape= (1,)*x.ndim    
-            else:
-                x_shape = list(x.shape)
-                x_shape[self.axis] = 1
-                x_shape = tuple(x_shape)
-            assert y.shape == x_shape
+        # if self.keepdims:
+        #     if self.axis is None:
+        #         x_shape= (1,)*x.ndim    
+        #     else:
+        #         x_shape = list(x.shape)
+        #         x_shape[self.axis] = 1
+        #         x_shape = tuple(x_shape)
+        #     assert y.shape == x_shape
         return y
 
     def gradients(self, node: Tensor, outGrad: Tensor):
         x = node.inputs[0]
         assert outGrad.ndim <= x.ndim
         if outGrad.ndim < x.ndim:
-            if self.axis is None:
-                outGradShape = (1,)*x.ndim
-            else:
-                outGradShape = list(x.shape)
-                outGradShape[self.axis] = 1
-            outGrad = outGrad.reshape(tuple(outGradShape))
+            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            outGrad = outGrad.reshape(outGradShape)
         dz = broadcast(outGrad, x.shape)
         assert dz.shape == x.shape
         return dz
@@ -199,12 +211,19 @@ class TensorExp(Operator):
         return dx
     
 class TensorMean(Operator):
+    def __init__(self, axis=None):
+        self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.mean(inputs[0].value())
+        return np.mean(inputs[0].value(), axis=self.axis)
     def gradients(self, node, outGrad):
+        # axis == None: (x,y,z) -> (1,1,1)
+        # axis == 1:    (x,y,z) -> (x,1,z)
         x = node.inputs[0]
-        grad = Tensor(np.ones(x.shape)) / x.size
-        dx = mult(outGrad, grad)
+        if outGrad.ndim < x.ndim:
+            outGradShape, outGradSize = get_broadcast_shape(outGrad, x, self.axis)
+            outGrad = outGrad.reshape(outGradShape)
+        dx = broadcast(outGrad, x.shape) / outGradSize
+
         assert dx.shape == x.shape
         return dx
     
@@ -225,13 +244,22 @@ class TensorPower(Operator):
         return dx
     
 class TensorMax(Operator):
+    def __init__(self, axis=None):
+        self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.max(inputs[0].value())
+        return np.max(inputs[0].value(), axis=self.axis)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
-        xi = np.argmax(x.value())
-        dx = np.zeros(x.shape)
-        dx[xi] = 1
+        if self.axis is None:
+            xi = np.argmax(x.value())
+            dx = np.zeros(x.shape)
+            np.put(dx, xi, 1)
+        else:
+            xi = np.argmax(x.value(), axis=self.axis, keepdims=True)
+            dx = np.zeros(x.shape)
+            np.put_along_axis(dx, xi, 1, axis=self.axis)
+            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            outGrad = outGrad.reshape(outGradShape)
 
         dx = outGrad * Tensor(dx)
         assert dx.shape == x.shape
@@ -245,11 +273,24 @@ class TensorNegate(Operator):
         return -outGrad
         
 class TensorNorm(Operator):
+    def __init__(self, axis=None):
+        self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.linalg.norm(inputs[0].value())   
+        return np.linalg.norm(inputs[0].value(), axis=self.axis)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
-        dx = outGrad * x / norm(x)
+        outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+        outGrad = outGrad.reshape(outGradShape)
+        dx = outGrad * x / norm(x, axis=self.axis)
+        assert dx.shape == x.shape
+        return dx
+    
+class TensorSqrt(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return np.sqrt(inputs[0].value())
+    def gradients(self, node, outGrad):
+        x = node.inputs[0]
+        dx = outGrad / (2 * sqrt(x))
         assert dx.shape == x.shape
         return dx
     
@@ -617,16 +658,18 @@ def summation(a, axis=None, keepdims=False):
     return TensorSum(axis, keepdims).tensor(a)
 def exp(a):
     return TensorExp().tensor(a)
-def mean(a):
-    return TensorMean().tensor(a)
+def mean(a, axis=None):
+    return TensorMean(axis=axis).tensor(a)
 def power(a, power):
     return TensorPower(power).tensor(a)
-def max(a):
-    return TensorMax().tensor(a)
+def max(a, axis=None):
+    return TensorMax(axis=axis).tensor(a)
 def neg(a):
     return TensorNegate().tensor(a)
-def norm(a):
-    return TensorNorm().tensor(a)
+def norm(a, axis=None):
+    return TensorNorm(axis=axis).tensor(a)
+def sqrt(a):
+    return TensorSqrt().tensor(a)
 
 def reshape(a, shape):
     return TensorReshape(shape).tensor(a)
