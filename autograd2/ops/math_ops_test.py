@@ -85,6 +85,59 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.matmul(x1, x2)
         self.numeric_check(forward, x1, x2)
 
+    def test_parse_einsum_equation(self):
+        equation = " B ij,B jk,Ad -> Bi k   "
+        a = np.arange(2*3*4).reshape(2,3,4)
+        b = np.arange(2*4*3).reshape(2,4,3)
+        c = np.arange(2*4).reshape(2,4)
+        inputs = [a,b,c]
+        input_eqs, output_eq, operands = ag.parse_einsum_equation(equation, *inputs)
+        self.assertEqual(input_eqs[0], "Bij")
+        self.assertEqual(input_eqs[1], "Bjk")
+        self.assertEqual(input_eqs[2], "Ad")
+        self.assertEqual(output_eq, "Bik")
+        self.assertEqual(operands[0].shape, (2,3,4))
+        self.assertEqual(operands[1].shape, (2,4,3))
+        self.assertEqual(operands[2].shape, (2,4))
+
+    def test_einsum(self):
+        x1 = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
+        x2 = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,4,3) + 1.0, requires_grad=True)
+        got = ag.einsum("Bij,Bjk->Bik", x1, x2)
+        want = np.einsum("Bij,Bjk->Bik", x1.value(), x2.value())
+        self.assertTrue(np.allclose(got.value(), want))
+
+        x1 = ag.Parameter(np.arange(3*4, dtype=np.float64).reshape(3,4) + 1.0, requires_grad=True)
+        x2 = ag.Parameter(np.arange(3*4, dtype=np.float64).reshape(3,4) + 1.0, requires_grad=True)
+        got = ag.einsum("ij,kj->ik", x1, x2)
+        want = np.matmul(x1.value(), x2.value().T)
+        self.assertTrue(np.allclose(got.value(), want))
+
+        x1 = ag.Parameter(np.arange(3*4, dtype=np.float64).reshape(3,4) + 1.0, requires_grad=True)
+        x2 = ag.Parameter(np.arange(3*4, dtype=np.float64).reshape(4,3) + 1.0, requires_grad=True)
+        got = ag.einsum("ij,jk->ik", x1, x2)
+        grad = ag.Gradient(np.zeros(got.shape), requires_grad=True)
+        got.backward(grad)
+        got_x1_grad = x1.grad
+        got_x2_grad = x2.grad
+        want_x1_grad = np.matmul(grad.value(), x2.value().T)
+        want_x2_grad = np.matmul(x1.value().T, grad.value())
+        self.assertTrue(np.allclose(got_x1_grad.value(), want_x1_grad))
+        self.assertTrue(np.allclose(got_x2_grad.value(), want_x2_grad))
+
+        # Test double gradients
+        x1.grad.backward()
+        # dot = ag.generate_graphviz(got)
+        # dot.render("graphviz", view=True, format="svg")
+
+    def test_einsum_gradient(self):
+        x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4) + 1.0, requires_grad=True)
+        x2 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4) + 1.0, requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x1, x2)
+            return ag.einsum("Bij,Bkl->Bijk", x1, x2)
+        self.numeric_check(forward, x1, x2)
+
     def test_sin(self):
         x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
         def forward(params):
@@ -273,6 +326,26 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.numeric_check(forward, x)
 
     def test_broadcast(self):
+        np.random.seed(1)
+        # Test broadcast from 2d matrix to 3d
+        x1 = ag.Tensor(np.random.rand(3,4), requires_grad=True)
+        y = ag.broadcast(x1, (2,3,4))
+        self.assertEqual(y.shape, (2,3,4))
+        self.assertTrue(np.array_equal(y.value()[0], x1.value()))
+        self.assertTrue(np.array_equal(y.value()[1], x1.value()))
+        y.backward()
+        self.assertTrue(np.array_equal(x1.grad.value(), 2*np.ones((3,4))))
+
+        # Test broadcast from 1d vector to 3d
+        x1 = ag.Tensor(np.random.rand(4), requires_grad=True)
+        y = ag.broadcast(x1, (2,3,4))
+        self.assertEqual(y.shape, (2,3,4))
+        self.assertTrue(np.array_equal(y.value()[0][0], x1.value()))
+        self.assertTrue(np.array_equal(y.value()[1][2], x1.value()))
+        y.backward()
+        self.assertTrue(np.array_equal(x1.grad.value(), 2*3*np.ones((4))))
+
+    def test_broadcast_gradient(self):
         np.random.seed(1)
         x1 = ag.Tensor(np.random.rand(3,1,3,1), requires_grad=True)
         def forward(params):

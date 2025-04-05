@@ -172,6 +172,66 @@ class TensorMatMul(Operator):
         assert dx.shape == X.shape
         assert dw.shape == W.shape
         return (dx, dw)
+
+def parse_einsum_equation(equation:str, *operands):
+    assert "->" in equation    
+    in_eq, out_eq = equation.split("->")
+    
+    in_eqs = in_eq.strip().split(",")
+    in_eqs = [eq.replace(" ", "") for eq in in_eqs]
+    out_eq = out_eq.strip().replace(" ", "")
+
+    assert len(in_eqs) == len(operands)
+    for i in range(len(in_eqs)):
+        assert len(in_eqs[i]) == operands[i].ndim
+
+    return in_eqs, out_eq, operands
+
+class TensorEinsteinSum(Operator):
+    def __init__(self, equation):
+        self.equation = equation
+
+    def compute(self, *inputs: Tuple[Tensor]):
+        # assert(len(inputs) == 2)
+        x = [a.value() for a in inputs]
+        y = np.einsum(self.equation, *x)
+        return y
+
+    def gradients(self, node, outGrad):
+        in_eqs, out_eq, ops = parse_einsum_equation(self.equation, *node.inputs)
+        assert(outGrad.ndim == len(out_eq))
+
+        derivatives = []
+        for arg in range(len(in_eqs)):
+            current_eq = in_eqs[arg]
+            rest_eq = in_eqs[:arg] + in_eqs[arg+1:]
+            current_op = ops[arg]
+            rest_ops = ops[:arg] + ops[arg+1:]
+
+            new_rest_eq = ",".join(rest_eq)
+            new_rest_ops = rest_ops        
+            missing = [
+                (index, symbol) for index, symbol in enumerate(current_eq)
+                if symbol not in out_eq
+            ]
+            if len(missing) > 0:
+                # when the einsum output equation is missing a symbol, it means
+                # we are doing a sum over that column. When computing the gradient
+                # backward we need to expand out that missing dimension
+                missing_eq = "".join([symbol for _, symbol in missing])
+                missing_shapes = [current_op.shape[index] for index, _ in missing]
+                missing_ops = Tensor(np.ones(missing_shapes))
+
+                new_rest_eq = ",".join([missing_eq] + rest_eq)
+                new_rest_ops = (missing_ops,) + rest_ops
+            
+            new_out_eq = f"{out_eq},{new_rest_eq}->{current_eq}"
+            dx = einsum(new_out_eq, outGrad, *new_rest_ops)
+            derivatives.append(dx)
+
+        for xi, x in enumerate(node.inputs):
+            assert derivatives[xi].shape == x.shape
+        return tuple(derivatives)
     
 class TensorSum(Operator):
     def __init__(self, axis=None, keepdims=False):
@@ -449,11 +509,15 @@ class TensorBroadcast(Operator):
 
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
-        assert(x.ndim == outGrad.ndim)
+        x_shape = x.shape
+        if x.ndim < outGrad.ndim:
+            x_shape = (1,)*(outGrad.ndim - x.ndim) + x_shape
+        assert len(x_shape) == outGrad.ndim
+        # assert(x.ndim <= outGrad.ndim)
 
         sum_axes = []
-        for axis in range(x.ndim):
-            s1 = x.shape[axis]
+        for axis in range(outGrad.ndim):
+            s1 = x_shape[axis]
             s2 = outGrad.shape[axis]
             if s1 != s2:
                 assert s1 == 1
@@ -646,6 +710,8 @@ def div_scalar(a, b):
     return TensorDivScalar(b).tensor(a)
 def matmul(a, b):
     return TensorMatMul().tensor(a, b)
+def einsum(equation, *inputs):
+    return TensorEinsteinSum(equation).tensor(*inputs)
 def sin(a):
     return TensorSin().tensor(a)
 def cos(a):

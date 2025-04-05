@@ -186,6 +186,73 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.variance(x)
         self.numeric_check(forward, x)
 
+    def test_batch_matmul_with_1d(self):
+        np.random.seed(1)
+        # a is 3d, b is 1d
+        a = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0)
+        b = ag.Parameter(np.arange(4, dtype=np.float64)+1.0)
+        got = ag.batch_matmul(a, b)
+        self.assertEqual(got.shape, (2,3,1))
+        want1 = np.matmul(a.value()[0], b.value())
+        want2 = np.matmul(a.value()[1], b.value())
+        self.assertTrue(np.allclose(got.value()[0][:,0], want1))
+        self.assertTrue(np.allclose(got.value()[1][:,0], want2))
+
+        got.backward()
+        self.assertEqual(a.grad.shape, (2,3,4))
+        self.assertEqual(b.grad.shape, (4,))
+
+        # a is 1d, b is 3d
+        a = ag.Parameter(np.arange(3, dtype=np.float64)+1.0)
+        b = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0)
+        got = ag.batch_matmul(a, b)
+        self.assertEqual(got.shape, (2,1,4))
+        want1 = np.matmul(a.value(), b.value()[0])
+        want2 = np.matmul(a.value(), b.value()[1])
+        self.assertTrue(np.allclose(got.value()[0][0,:], want1))
+        self.assertTrue(np.allclose(got.value()[1][0,:], want2))
+
+        got.backward()
+        self.assertEqual(b.grad.shape, (2,3,4))
+        self.assertEqual(a.grad.shape, (3,))
+
+    def test_batch_matmul_with_2d(self):
+        # a is 3d, b is 2d
+        a = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0)
+        b = ag.Parameter(np.arange(4*3, dtype=np.float64).reshape(4,3)+1.0)
+        got = ag.batch_matmul(a, b)
+        self.assertEqual(got.shape, (2,3,3))
+        want1 = np.matmul(a.value()[0], b.value())
+        want2 = np.matmul(a.value()[1], b.value())
+        self.assertTrue(np.allclose(got.value()[0], want1))
+        self.assertTrue(np.allclose(got.value()[1], want2))
+
+        got.backward()
+        self.assertEqual(a.grad.shape, (2,3,4))
+        self.assertEqual(b.grad.shape, (4,3))
+
+        # a is 2d, b is 3d
+        a = ag.Parameter(np.arange(4*3, dtype=np.float64).reshape(4,3)+1.0)
+        b = ag.Parameter(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0)
+        got = ag.batch_matmul(a, b)
+        self.assertEqual(got.shape, (2,4,4))
+        want1 = np.matmul(a.value(), b.value()[0])
+        want2 = np.matmul(a.value(), b.value()[1])
+        self.assertTrue(np.allclose(got.value()[0], want1))
+        self.assertTrue(np.allclose(got.value()[1], want2))
+
+        got.backward()
+        self.assertEqual(a.grad.shape, (4,3))
+        self.assertEqual(b.grad.shape, (2,3,4))
+
+    def test_batch_matmul_gradient(self):
+        x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4) + 1.0, requires_grad=True)
+        x2 = ag.Tensor(np.arange(4*3).reshape(4,3) + 1.0, requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x1, x2)
+            return ag.batch_matmul(x1, x2)
+        self.numeric_check(forward, x1, x2)
+
 if __name__ == '__main__':
     unittest.main()
     
