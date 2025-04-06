@@ -163,29 +163,40 @@ def relu(x):
     return (x + ag.norm(x)) / 2.0
 def max_pool2d(x, kernel_size, stride=1, padding=0):
     return TensorMaxPool(kernel_size, stride, padding).tensor(x)
-def variance(x):
-    z1 = x - ag.mean(x)
-    return ag.mean(z1*z1)
-def std(x):
-    return ag.sqrt(variance(x))
+def variance(x, axis=None, mean=None):
+    if mean is None:
+        mean = ag.mean(x, axis=axis)
+    z1 = x - mean
+    return ag.mean(z1*z1, axis=axis)
+def std(x, axis=None):
+    return ag.sqrt(variance(x, axis=axis))
 def batch_matmul(a, b):
-    assert a.ndim == 3 or b.ndim == 3
     assert a.ndim <= 3
     assert b.ndim <= 3
-    batch_size = a.shape[0] if a.ndim == 3 else b.shape[0]
+    if a.ndim == 3 or b.ndim == 3:
+        batch_size = a.shape[0] if a.ndim == 3 else b.shape[0]
+        
+        # TODO: See if we can switch to just purely use einsum equations
+        # instead of broadcasting/shapping the input
+        if a.ndim == 2:
+            a = ag.broadcast(a, (batch_size, a.shape[0], a.shape[1]))
+        elif a.ndim == 1:
+            a = ag.broadcast(a, (batch_size, 1, a.shape[0]))
+        if b.ndim == 2:
+            b = ag.broadcast(b, (batch_size, b.shape[0], b.shape[1]))
+        elif b.ndim == 1:
+            b = ag.reshape(b, (b.shape[0], 1))
+            b = ag.broadcast(b, (batch_size, b.shape[0], 1))
+        return ag.einsum("Bij,Bjk->Bik", a, b)
     
-    # TODO: See if we can switch to just purely use einsum equations
-    # instead of broadcasting/shapping the input
-    if a.ndim == 2:
-        a = ag.broadcast(a, (batch_size, a.shape[0], a.shape[1]))
-    elif a.ndim == 1:
-        a = ag.broadcast(a, (batch_size, 1, a.shape[0]))
-    if b.ndim == 2:
-        b = ag.broadcast(b, (batch_size, b.shape[0], b.shape[1]))
-    elif b.ndim == 1:
-        b = ag.reshape(b, (b.shape[0], 1))
-        b = ag.broadcast(b, (batch_size, b.shape[0], 1))
-    return ag.einsum("Bij,Bjk->Bik", a, b)
+    else:
+        assert a.ndim == 2 or b.ndim == 2
+        if a.ndim > b.ndim:
+            return ag.einsum("Bi,i->B", a, b)
+        elif a.ndim < b.ndim:
+            return ag.einsum("i,Bi->B", a, b)
+        else:
+            return ag.einsum("Bi,Bi->B", a, b)
 
 # def convolve2d_input(x, kernel_size, stride=1, padding=0):
 

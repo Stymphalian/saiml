@@ -7,6 +7,6 @@ class LayerNorm(Module):
     
     def forward(self, x):
         mean = ag.mean(x)
-        stddev = ag.sqrt(ag.variance(x))
-        y = (x - mean) / stddev
+        stddev = ag.sqrt(ag.variance(x))  
+        y = (x - mean) / (stddev + self.EPSILON)
         return y

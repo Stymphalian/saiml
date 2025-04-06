@@ -44,6 +44,9 @@ class Module:
         # return the parameters and gradients for the module
         self.params = []
 
+    def __call__(self, *args, **kwargs):
+        return self.forward(*args, **kwargs)
+
     def forward(self, x):
         """Inference"""
         raise NotImplementedError()

@@ -245,6 +245,37 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertEqual(a.grad.shape, (4,3))
         self.assertEqual(b.grad.shape, (2,3,4))
 
+    def test_batch_matmul_2dimensions(self):
+        # bi,bi->b
+        x1 = ag.Tensor(np.arange(2*3).reshape(2,3) + 1.0, requires_grad=True)
+        x2 = ag.Tensor(np.arange(2*3).reshape(2,3) + 5.0, requires_grad=True)
+        got = ag.batch_matmul(x1, x2)
+        got.backward()
+        want1 = np.matmul(x1[0].value(), x2[0].value())
+        want2 = np.matmul(x1[1].value(), x2[1].value())
+        self.assertTrue(np.allclose(got[0].value(), want1))
+        self.assertTrue(np.allclose(got[1].value(), want2))
+
+        # bi,i->b
+        x1 = ag.Tensor(np.arange(2*3).reshape(2,3) + 1.0, requires_grad=True)
+        x2 = ag.Tensor(np.arange(3) + 5.0, requires_grad=True)
+        got = ag.batch_matmul(x1, x2)
+        got.backward()
+        want1 = np.matmul(x1[0].value(), x2.value())
+        want2 = np.matmul(x1[1].value(), x2.value())
+        self.assertTrue(np.allclose(got[0].value(), want1))
+        self.assertTrue(np.allclose(got[1].value(), want2))
+
+        # i,bi->b
+        x1 = ag.Tensor(np.arange(3) + 1.0, requires_grad=True)
+        x2 = ag.Tensor(np.arange(2*3).reshape(2,3) + 5.0, requires_grad=True)
+        got = ag.batch_matmul(x1, x2)
+        got.backward()
+        want1 = np.matmul(x1.value(), x2[0].value())
+        want2 = np.matmul(x1.value(), x2[1].value())
+        self.assertTrue(np.allclose(got[0].value(), want1))
+        self.assertTrue(np.allclose(got[1].value(), want2))
+
     def test_batch_matmul_gradient(self):
         x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4) + 1.0, requires_grad=True)
         x2 = ag.Tensor(np.arange(4*3).reshape(4,3) + 1.0, requires_grad=True)

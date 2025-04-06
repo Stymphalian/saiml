@@ -4,32 +4,62 @@ from ..base import Operator, Tensor, TensorTuple
 
 
 def get_broadcast_shape(outGrad, x, axis):
-    if outGrad.ndim < x.ndim:
-        if axis is None:
-            outGradShape = (1,)*x.ndim
-            outGradSize = x.size
-        else:
-            outGradShape = np.array(x.shape)                
-            axes = list(axis) if isinstance(axis, (list, tuple)) else [axis]
-            outGradSize = np.prod(outGradShape[axes])
-            outGradShape[axes] = 1
+    """
+    Given the axis in which an operation was applied to x. 
+    Get the new output_shape with (1,) put into the axis
+    """
+    if axis is None:
+        outGradShape = (1,)*x.ndim
+        outGradSize = x.size
     else:
-        outGradShape = outGrad.shape
-        outGradSize = outGrad.size
+        outGradShape = np.array(x.shape)                
+        axes = list(axis) if isinstance(axis, (list, tuple)) else [axis]
+        outGradSize = np.prod(outGradShape[axes])
+        outGradShape[axes] = 1
     return tuple(outGradShape), outGradSize
+
+def get_broadcasting_axes(a_shape, b_shape):
+    axes = []
+    a_ndim = len(a_shape)
+    b_ndim = len(b_shape)
+    if a_ndim < b_ndim:
+        a_shape = (1,)*(b_ndim - a_ndim) + a_shape
+        axes.extend(range(b_ndim - a_ndim, b_ndim))
+    else:
+        b_shape = (1,)*(a_ndim - b_ndim) + b_shape
+        axes.extend(range(a_ndim - b_ndim, a_ndim))
+    
+    assert len(a_shape) == len(b_shape)
+    num_axes = len(a_shape)
+
+    axes = []
+    for axis in range(num_axes):
+        if a_shape[axis] != b_shape[axis]:
+            axes.append(axis)
+    return tuple(axes)
+
 
 class TensorAdd(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.add(inputs[0].value(), inputs[1].value())
+        assert len(inputs) == 2
+        a = inputs[0].value()
+        b = inputs[1].value()
+        y = np.add(a, b)
+        assert y.shape == a.shape or y.shape == b.shape
+        return y
+
     def gradients(self, node, outGrad):
         a = node.inputs[0]
         b = node.inputs[1]
         da = outGrad
         db = outGrad
-        if a.shape < da.shape:
-            da = summation(da).reshape(a.shape)
-        if b.shape < db.shape:
-            db = summation(db).reshape(b.shape)
+
+        if a.size < da.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            da = summation(da, axis=axes).reshape(a.shape)
+        if b.size < db.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            db = summation(db, axis=axes).reshape(b.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
         return (da, db)
@@ -51,10 +81,12 @@ class TensorSub(Operator):
         b = node.inputs[1]
         da = outGrad
         db = -outGrad
-        if a.shape < da.shape:
-            da = summation(da).reshape(a.shape)
-        if b.shape < db.shape:
-            db = summation(db).reshape(b.shape)
+        if a.size < da.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            da = summation(da, axis=axes).reshape(a.shape)
+        if b.size < db.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            db = summation(db, axis=axes).reshape(b.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
         return (da, db)
@@ -77,10 +109,12 @@ class TensorMult(Operator):
         da = outGrad * b
         db = outGrad * a
 
-        if a.shape < da.shape:
-            da = summation(da).reshape(a.shape)
-        if b.shape < db.shape:
-            db = summation(db).reshape(b.shape)
+        if a.size < da.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            da = summation(da, axis=axes).reshape(a.shape)
+        if b.size < db.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            db = summation(db, axis=axes).reshape(b.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
 
@@ -106,10 +140,12 @@ class TensorDiv(Operator):
         da = outGrad / b
         db = -outGrad * a / (b * b)
 
-        if b.shape < db.shape:
-            db = summation(db).reshape(b.shape)
-        if a.shape < da.shape:    
-            da = summation(da).reshape(a.shape)
+        if a.size < da.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            da = summation(da, axis=axes).reshape(a.shape)
+        if b.size < db.size:
+            axes = get_broadcasting_axes(a.shape, b.shape)
+            db = summation(db, axis=axes).reshape(b.shape)
         assert da.shape == a.shape
         assert db.shape == b.shape
 
@@ -254,7 +290,8 @@ class TensorSum(Operator):
     def gradients(self, node: Tensor, outGrad: Tensor):
         x = node.inputs[0]
         assert outGrad.ndim <= x.ndim
-        if outGrad.ndim < x.ndim:
+        # if outGrad.ndim < x.ndim:
+        if outGrad.shape != x.shape:
             outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
         dz = broadcast(outGrad, x.shape)
@@ -271,15 +308,22 @@ class TensorExp(Operator):
         return dx
     
 class TensorMean(Operator):
-    def __init__(self, axis=None):
+    def __init__(self, axis=None, keepdims=False):
         self.axis = axis
+        self.keepdims = keepdims
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.mean(inputs[0].value(), axis=self.axis)
+        return np.mean(
+            inputs[0].value(), 
+            axis=self.axis,
+            keepdims=self.keepdims
+        )
     def gradients(self, node, outGrad):
         # axis == None: (x,y,z) -> (1,1,1)
         # axis == 1:    (x,y,z) -> (x,1,z)
+        # axes == (1,2) (x,y,z) -> (x,)
         x = node.inputs[0]
-        if outGrad.ndim < x.ndim:
+        outGradSize = x.size
+        if outGrad.shape != x.shape:
             outGradShape, outGradSize = get_broadcast_shape(outGrad, x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
         dx = broadcast(outGrad, x.shape) / outGradSize
@@ -724,8 +768,8 @@ def summation(a, axis=None, keepdims=False):
     return TensorSum(axis, keepdims).tensor(a)
 def exp(a):
     return TensorExp().tensor(a)
-def mean(a, axis=None):
-    return TensorMean(axis=axis).tensor(a)
+def mean(a, axis=None, keepdims=False):
+    return TensorMean(axis=axis, keepdims=keepdims).tensor(a)
 def power(a, power):
     return TensorPower(power).tensor(a)
 def max(a, axis=None):

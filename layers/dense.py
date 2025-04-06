@@ -12,4 +12,8 @@ class Dense(Module):
         self.params = [self.W, self.b]
 
     def forward(self, X):
+        # TODO: Flatten the input to the correct size so that other modules 
+        # don't have to do it themselves
+        # y = ag.batch_matmul(self.W, X) + self.b
+        # return y
         return ag.matmul(self.W, X) + self.b

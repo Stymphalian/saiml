@@ -6,12 +6,23 @@ import base_gradient_test
 class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
     def test_add(self):
-        x1 = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
-        x2 = ag.Tensor(np.arange(3, dtype=np.float64) + 2.0, requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x1, x2)
-            return ag.add(x1, x2)
-        self.numeric_check(forward, x1, x2)
+        np.random.seed(1)
+        shapes = [
+            ((3,), (3,)),
+            ((3,), (2,3,)),
+            ((1,3,), (2,3,)),
+            ((1,2,1), (4,2,3)),
+            ((1,2,1), (4,2,3)),
+        ]
+        for shape1, shape2 in shapes:
+            x1 = np.arange(np.prod(shape1), dtype=np.float64).reshape(shape1) + 1.0
+            x2 = np.arange(np.prod(shape2), dtype=np.float64).reshape(shape2) + 1.0
+            x1 = ag.Tensor(x1, requires_grad=True)
+            x2 = ag.Tensor(x2, requires_grad=True)
+            def forward(params):
+                self.unravel_params(params, x1, x2)
+                return ag.add(x1, x2)
+            self.numeric_check(forward, x1, x2)
 
     def test_add_scalar(self):
         x1 = ag.Tensor(np.arange(3, dtype=np.float64) + 1.0, requires_grad=True)
@@ -127,8 +138,6 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
         # Test double gradients
         x1.grad.backward()
-        # dot = ag.generate_graphviz(got)
-        # dot.render("graphviz", view=True, format="svg")
 
     def test_einsum_gradient(self):
         x1 = ag.Tensor(np.arange(2*3*4).reshape(2,3,4) + 1.0, requires_grad=True)
@@ -245,9 +254,10 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
     def test_mean(self):
         x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
         for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
-            z = ag.mean(x, axis=axis)
-            want = np.mean(x.value(), axis=axis)
-            self.assertTrue(np.array_equal(z.value(), want))
+            for keepdims in [True, False]:
+                z = ag.mean(x, axis=axis, keepdims=keepdims)
+                want = np.mean(x.value(), axis=axis, keepdims=keepdims)
+                self.assertTrue(np.array_equal(z.value(), want))
 
     def test_mean_gradient(self):
         x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
@@ -272,10 +282,11 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
     def test_mean_backward(self):
         x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
         for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
-            def forward(params):
-                self.unravel_params(params, x)
-                return ag.mean(x, axis=axis)
-            self.numeric_check(forward, x)
+            for keepdims in [True, False]:
+                def forward(params):
+                    self.unravel_params(params, x)
+                    return ag.mean(x, axis=axis, keepdims=keepdims)
+                self.numeric_check(forward, x)
     
     def test_power(self):
         x = ag.Tensor(np.arange(9, dtype=np.float64) + 1.0, requires_grad=True)
@@ -325,6 +336,19 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.reshape(x, (2,6))
         self.numeric_check(forward, x)
 
+    def test_broadcasting_axes(self):
+        tests = [
+            ((4,), (2,4), (0,)),
+            ((1,4), (2,4), (0,)),
+            ((2,1,4), (2,3,4), (1,)),
+            ((2,1,2,1), (2,5,2,6), (1,3)),
+        ]
+        for shape1, shape2, want in tests:
+            got = ag.get_broadcasting_axes(shape1, shape2)
+            self.assertEquals(got, want)
+            got = ag.get_broadcasting_axes(shape2, shape1)
+            self.assertEquals(got, want)
+
     def test_broadcast(self):
         np.random.seed(1)
         # Test broadcast from 2d matrix to 3d
@@ -347,11 +371,20 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
     def test_broadcast_gradient(self):
         np.random.seed(1)
-        x1 = ag.Tensor(np.random.rand(3,1,3,1), requires_grad=True)
-        def forward(params):
-            self.unravel_params(params, x1)
-            return ag.broadcast(x1, (3,3,3,3))
-        self.numeric_check(forward, x1)
+
+        broadcast_shapes = [
+            ((4,), (2,3,4)),
+            ((3,4), (2,3,4)),
+            ((1,4), (2,3,4)),
+            ((1,1), (2,3,4)),
+            ((2,1,4), (5,2,3,4)),
+        ]
+        for input_shape, output_shape in broadcast_shapes:
+            x1 = ag.Tensor(np.random.rand(*input_shape), requires_grad=True)
+            def forward(params):
+                self.unravel_params(params, x1)
+                return ag.broadcast(x1, output_shape)
+            self.numeric_check(forward, x1)
 
     def test_norm(self):
         np.random.seed(1)

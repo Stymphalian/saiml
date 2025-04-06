@@ -55,6 +55,7 @@ class Tensor(Node):
             operator: Optional[Operator]=None,
             requires_grad=False,
             dtype=np.float64, 
+            name="",
             inputs: Tuple["Tensor"]=()):
         super().__init__()
 
@@ -73,7 +74,7 @@ class Tensor(Node):
         self.operator = operator
         self.inputs = inputs
         self.requires_grad = requires_grad
-        self._name = ""
+        self._name = name
 
     def value(self):
         if self._data is None:
@@ -271,15 +272,15 @@ class TensorTuple(Node):
     def __str__(self):
         return "TensorTuple(" + self.value().__str__() + ")"
     
-def ones(shape, dtype=np.float64):
-    return Tensor(np.ones(shape), dtype=dtype)
-def zeros(shape, dtype=np.float64):
-    return Tensor(np.zeros(shape), dtype=dtype)
-def random(shape, dtype=np.float64):
-    return Tensor(np.random.rand(*shape), dtype=dtype)
-def arange(shape, dtype=np.float64):
+def ones(shape, dtype=np.float64, requires_grad=False):
+    return Tensor(np.ones(shape), dtype=dtype, requires_grad=requires_grad)
+def zeros(shape, dtype=np.float64, requires_grad=False):
+    return Tensor(np.zeros(shape), dtype=dtype, requires_grad=requires_grad)
+def random(shape, dtype=np.float64, requires_grad=False):
+    return Tensor(np.random.rand(*shape), dtype=dtype, requires_grad=requires_grad)
+def arange(shape, dtype=np.float64, requires_grad=False):
     size = np.prod(shape)
-    return Tensor(np.arange(size).reshape(shape), dtype=dtype)
+    return Tensor(np.arange(size).reshape(shape), dtype=dtype, requires_grad=requires_grad)
 
 def grad(node: Union[Tensor, TensorTuple], outGrad=None):
     node_to_grads = defaultdict(list)
@@ -356,3 +357,7 @@ def generate_graphviz(node: Tensor):
         for y in v.inputs:
             dot.edge(str(y.id), str(v.id))
     return dot
+
+def render_graphviz(node: Tensor):
+    dot = generate_graphviz(node)
+    dot.render("graphviz", view=True, format="svg")

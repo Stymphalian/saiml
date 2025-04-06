@@ -4,6 +4,10 @@ import autograd2 as ag
 
 class NumericalGradientTest(unittest.TestCase):
 
+    def setUp(self):
+        super().setUp()
+        np.random.seed(1)
+
     def numeric_check(self, forward, *inputs, threshold=1e-6, do_print=False):
         params = np.concatenate([x.value().reshape(-1) for x in inputs])
         y = forward(params)
