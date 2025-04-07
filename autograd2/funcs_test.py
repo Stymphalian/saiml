@@ -38,7 +38,6 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         y = ag.softmax(x)
         y.backward()
 
-
     def test_softmax(self):
         np.random.seed(1)
         x = ag.Tensor(np.random.rand(10), requires_grad=True)
@@ -47,6 +46,17 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.softmax(x)
         self.numeric_check(forward, x, threshold=1.0)
         # self.numeric_check(forward, x)
+
+    def test_batch_softmax(self):
+        np.random.seed(1)
+        x1 = np.arange(2*5*2).reshape(2,5,2)
+        x = ag.Tensor(x1, requires_grad=True)
+
+        got = ag.softmax(x, axis=(1,2))
+        want1 = ag.softmax(x[0])
+        want2 = ag.softmax(x[1])
+        self.assertTrue(np.allclose(got[0].value(), want1.value()))
+        self.assertTrue(np.allclose(got[1].value(), want2.value()))
     
     def test_sequence(self):
         # np.random.seed(1)
@@ -245,6 +255,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertEqual(a.grad.shape, (4,3))
         self.assertEqual(b.grad.shape, (2,3,4))
 
+    @unittest.skip("Not supported anymore")
     def test_batch_matmul_2dimensions(self):
         # bi,bi->b
         x1 = ag.Tensor(np.arange(2*3).reshape(2,3) + 1.0, requires_grad=True)

@@ -38,6 +38,17 @@ def get_broadcasting_axes(a_shape, b_shape):
             axes.append(axis)
     return tuple(axes)
 
+def reshape_to_match_shape(a, b):
+    a_shape = a.shape
+    b_shape = b.shape
+    if a.ndim < b.ndim:
+        a_shape = (1,) * (b.ndim - a.ndim) + a_shape
+    elif a.ndim > b.ndim:
+        b_shape = (1,) * (a.ndim - b.ndim) + b_shape
+    return a_shape, b_shape
+
+def make_axes_positive(axes, ndim):
+    return [axis if axis >= 0 else ndim + axis for axis in axes]
 
 class TensorAdd(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
@@ -203,8 +214,27 @@ class TensorMatMul(Operator):
     def gradients(self, node, outGrad):
         X = node.inputs[0]
         W = node.inputs[1]
-        dx = matmul(outGrad, W.T) 
-        dw = matmul(X.T, outGrad) 
+        if X.ndim > 2 or W.ndim > 2:
+            # x_shape, w_shape = reshape_to_match_shape(X, W)
+            # X = reshape(X, x_shape)
+            # W = reshape(W, w_shape)
+            assert X.ndim == W.ndim
+            w_axes = list(range(W.ndim-2)) + [-1,-2]
+            x_axes = list(range(X.ndim-2)) + [-1,-2]
+            wt = transpose(W, axis=w_axes)
+            xt = transpose(X, axis=x_axes)
+        else:
+            xt = X.T
+            wt = W.T
+        dx = matmul(outGrad, wt) 
+        dw = matmul(xt, outGrad) 
+
+        x_axes = get_broadcasting_axes(dx.shape, X.shape)
+        w_axes = get_broadcasting_axes(dw.shape, W.shape)
+        if len(x_axes) > 0:
+            dx = summation(dx, axis=x_axes).reshape(X.shape)
+        if len(w_axes) > 0:
+            dw = summation(dw, axis=w_axes).reshape(W.shape)
         assert dx.shape == X.shape
         assert dw.shape == W.shape
         return (dx, dw)
@@ -347,21 +377,62 @@ class TensorPower(Operator):
         assert (dx.shape == x.shape)
         return dx
     
+
+# TODO: argmax_axes should return in the same format as np.argmax
+# The reshaping into the dx format should happen outside of this method
+def argmax_axes(x, axes, keepdims=True):
+    # Handle axes with negative indexing
+    axes = [axis if axis >= 0 else x.ndim + axis for axis in axes]
+
+    all_axes = set(list(range(x.ndim)))
+    rest_axes = tuple(sorted(set(all_axes) - set(axes)))
+    axes_shape = tuple([x.shape[axis] for axis in axes])
+    rest_axes_shape = tuple([x.shape[axis] for axis in rest_axes])
+    rest_axes_size = np.prod(rest_axes_shape)
+     
+    dx = np.zeros(x.shape)
+    for i in range(rest_axes_size):
+        rest_axes_coords = np.unravel_index(i, rest_axes_shape)
+        assert len(rest_axes_coords) == len(rest_axes)
+
+        indexing = [slice(None)]*x.ndim
+        for axis, coord in zip(rest_axes, rest_axes_coords):
+            indexing[axis] = coord
+
+        # Assign a 1 into the place into the place where the max is found
+        maxindex = np.argmax(x[tuple(indexing)])
+        coords = np.unravel_index(maxindex, axes_shape)
+        assert len(coords) == len(axes)
+        for axis, coord in zip(axes, coords):
+            indexing[axis] = coord
+        dx[tuple(indexing)] = 1
+
+    if not keepdims:
+        # TODO: This doesn't work
+        raise NotImplementedError()
+        dx = np.squeeze(dx, axis=rest_axes)
+    return dx
+        
 class TensorMax(Operator):
-    def __init__(self, axis=None):
+    def __init__(self, axis=None, keepdims=False):
         self.axis = axis
+        self.keepdims = keepdims
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.max(inputs[0].value(), axis=self.axis)
+        return np.max(inputs[0].value(), axis=self.axis, keepdims=self.keepdims)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         if self.axis is None:
             xi = np.argmax(x.value())
             dx = np.zeros(x.shape)
             np.put(dx, xi, 1)
-        else:
+        elif isinstance(self.axis, int):
             xi = np.argmax(x.value(), axis=self.axis, keepdims=True)
             dx = np.zeros(x.shape)
             np.put_along_axis(dx, xi, 1, axis=self.axis)
+            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            outGrad = outGrad.reshape(outGradShape)
+        else:
+            dx = argmax_axes(x.value(), self.axis)
             outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
 
@@ -582,7 +653,10 @@ class TensorTranspose(Operator):
         return np.transpose(x, self.axis)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
-        dx = transpose(outGrad, self.axis)
+
+        axes = make_axes_positive(self.axis, x.ndim)
+        reverse_axes = np.argsort(axes)
+        dx = transpose(outGrad, reverse_axes)
         assert dx.shape == x.shape
         return dx
     
@@ -772,8 +846,8 @@ def mean(a, axis=None, keepdims=False):
     return TensorMean(axis=axis, keepdims=keepdims).tensor(a)
 def power(a, power):
     return TensorPower(power).tensor(a)
-def max(a, axis=None):
-    return TensorMax(axis=axis).tensor(a)
+def max(a, axis=None, keepdims=False):
+    return TensorMax(axis=axis, keepdims=keepdims).tensor(a)
 def neg(a):
     return TensorNegate().tensor(a)
 def norm(a, axis=None):

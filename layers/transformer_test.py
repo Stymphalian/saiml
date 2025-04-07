@@ -5,7 +5,7 @@ from .transformer import *
 from tokenizer import Tokenizer
 import base_gradient_test
 
-class TestAttention(base_gradient_test.NumericalGradientTest):
+class TestTransformers(base_gradient_test.NumericalGradientTest):
 
     def test_embedding(self):
         vocab = list("abcdefghijklmnopqrstuvwxyz")
@@ -71,11 +71,11 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
             return do()
         self.numeric_check(forward, x)
 
-    def test_batch_layer_norm(self):
+    def test_layer_norm(self):
         np.random.seed(1)
         batches = 2
         x = ag.arange((batches, 2,3,4,5,6)) + 1.0
-        layer = LayerNorm(x.shape[1:])
+        layer = LayerNorm((x.shape[1:]))
         y = layer.forward(x)
         y.backward()
         self.assertEqual(y.shape, x.shape)
@@ -83,7 +83,7 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
         self.assertAlmostEqual(np.std(y.value()[0]), 1.0)
 
     @unittest.skip("Numerically unstable for numeric gradient checking")
-    def test_batch_layer_norm_gradient(self):
+    def test_layer_norm_gradient(self):
         batches = 2
         input_shape = (4,3,2)
         layer = LayerNorm(input_shape)
@@ -126,10 +126,29 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
             return do()
         self.numeric_check(forward, x)
 
+    def test_batch_mult_for_multihead_attention(self):
+        b = 1
+        n = 2
+        h = 3
+        k = 4
+        x = np.arange(b*h*n*k, dtype=np.float64).reshape((b,h,n,k)) + 1.0
+        q = np.round(np.random.rand(h,k,k), 2)
+        q = np.reshape(q, (b, h, k, k))
+        y = np.einsum("Bhnk,Bhkj->Bhnj", x, q)
+
+        zs = []
+        for head in range(h):
+            z1 = np.matmul(x[0,head], q[0,head])
+            zs.append(z1)
+        z = np.stack(zs)
+
+        self.assertTrue(np.allclose(y, z))
+
+
     def test_self_attention(self):
         np.random.seed(1)
         x = ag.arange((2,3,4)) + 1.0
-        layer = SelfAttention(x.shape[2])
+        layer = SimpleSelfAttention(x.shape[2])
         y = layer.forward(x)
         y.backward()
         self.assertEqual(y.shape, x.shape)
@@ -140,7 +159,7 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
         seq_len = 3
         embed_dims = 5
         x = ag.Parameter(np.random.rand(batches, seq_len, embed_dims))
-        layer = SelfAttention(embed_dims)
+        layer = SimpleSelfAttention(embed_dims)
         def forward(params):
             self.unravel_params(params, x)
             got = layer.forward(x)  
@@ -148,12 +167,81 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
             return loss
         self.numeric_check(forward, x)
 
+    def test_linear(self):
+        layer = Linear(4,3)
+        # TODO: Bug with +1.0 on arange, the resulting Tensor doesn't share the requires_grad
+        x0 = np.arange(2*3*4).reshape(2,3,4) + 1.0
+        x = ag.Parameter(x0)
+        y = layer.forward(x)
+        y.backward()
+        self.assertEqual(y.shape, (2,3,3))
+
+        want1 = np.matmul(x0[0], layer.w.value()) + layer.b.value()
+        want2 = np.matmul(x0[1], layer.w.value()) + layer.b.value()
+        self.assertTrue(np.allclose(y.value()[0], want1))
+        self.assertTrue(np.allclose(y.value()[1], want2))
+
+        def forward(params):
+            self.unravel_params(params, x)
+            got = layer.forward(x)  
+            loss = ag.mean(got)
+            return loss
+        self.numeric_check(forward, x)
+
+    def test_dotproduct_self_attention_gradient(self):
+        b = 1
+        n = 2
+        h = 3
+        dq = 4
+        dv = 5
+        
+        query = ag.Parameter(np.random.rand(b,h,n,dq))
+        key = ag.Parameter(np.random.rand(b,h,dq,n))
+        value = ag.Parameter(np.random.rand(b,h,n,dv))
+        def forward(params):
+            self.unravel_params(params, query, key, value)
+            got = attention(query, key, value)
+            loss = ag.mean(got)
+            return loss
+        self.numeric_check(forward, query, key, value)
+
+    def test_dotproduct_self_attention(self):
+        b = 1
+        n = 2
+        h = 3
+        dq = 4
+        dv = 5
+        
+        query = ag.Parameter(np.random.rand(b,h,n,dq))
+        key = ag.Parameter(np.random.rand(b,h,dq,n))
+        value = ag.Parameter(np.random.rand(b,h,n,dv))
+        y = attention(query, key, value)
+        y.backward()
+        self.assertEqual(y.shape, (b,h,n,dv))
+
+    def test_multihead_self_attention(self):
+        b,n,d = 3,5,6
+        h,d_kq,d_v = 1,7,8
+        layer = MultiHeadSelfAttention(d, dim_keyquery=d_kq, dim_value=d_v, num_heads=h)
+        x = ag.Parameter(np.random.rand(b,n,d))
+        y = layer.forward(x)
+
+        y.backward()
+        self.assertEquals(y.shape, (b,n,d_v))
+
+        def forward(params):
+            self.unravel_params(params, x)
+            got = layer.forward(x)  
+            loss = ag.mean(got)
+            return loss
+        self.numeric_check(forward, x)
+        
     def test_residual_layer(self):
         batches = 2
         seq_len = 3
         embed_dims = 4
         x = ag.Parameter(np.random.rand(batches, seq_len, embed_dims))
-        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SelfAttention(embed_dims)])
+        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
         layer = ResidualLayer(layer1)
         y = layer.forward(x)
         y.backward()
@@ -163,7 +251,7 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
         seq_len = 3
         embed_dims = 4
         x = ag.Parameter(np.random.rand(batches, seq_len, embed_dims))
-        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SelfAttention(embed_dims)])
+        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
         layer = ResidualLayer(layer1)
         def forward(params):
             self.unravel_params(params, x)
@@ -176,12 +264,13 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
         np.random.seed(1)
         batches = 2
         seq_len = 3
-        embed_dims = 5
+        embed_dims = 6
+        num_heads = 2
 
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = Transformer(seq_len, embed_dims)
+        layer = Transformer(seq_len, embed_dims, num_heads=num_heads)
         y = layer.forward(x)
         y.backward()
 
@@ -189,12 +278,13 @@ class TestAttention(base_gradient_test.NumericalGradientTest):
         np.random.seed(1)
         batches = 2
         seq_len = 3
-        embed_dims = 5
+        embed_dims = 6
+        num_heads = 2
 
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = Transformer(seq_len, embed_dims)
+        layer = Transformer(seq_len, embed_dims, num_heads=num_heads)
         def forward(params):
             self.unravel_params(params, x)
             got = layer.forward(x)  

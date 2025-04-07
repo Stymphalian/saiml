@@ -7,6 +7,7 @@ import utils
 import autograd2 as ag
 from layers import *
 from dataloader.shakespeare import ShakespeareDataLoader
+from tokenizer import Tokenizer
       
     
 def main():

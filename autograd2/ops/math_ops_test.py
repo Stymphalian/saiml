@@ -96,6 +96,27 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.matmul(x1, x2)
         self.numeric_check(forward, x1, x2)
 
+    def test_matmul_with_shapes(self):
+        np.random.seed(0)
+        shapes = [
+            ((2,3), (3,4)),
+            ((3,3), (3,3)),
+            ((3,3), (3,1)),
+            # ((3,3), (3,)),
+            # ((3,), (3,4)),
+            ((2,3,3), (2,3,4)),
+            ((1,5,2,3,3), (1,5,2,3,4)),
+        ]
+        for shape1, shape2 in shapes:
+            x1 = np.arange(np.prod(shape1), dtype=np.float64).reshape(shape1) + 1.0
+            x2 = np.arange(np.prod(shape2), dtype=np.float64).reshape(shape2) + 1.0
+            x1 = ag.Tensor(x1, requires_grad=True)
+            x2 = ag.Tensor(x2, requires_grad=True)
+            def forward(params):
+                self.unravel_params(params, x1, x2)
+                return ag.matmul(x1, x2)
+            self.numeric_check(forward, x1, x2)
+
     def test_parse_einsum_equation(self):
         equation = " B ij,B jk,Ad -> Bi k   "
         a = np.arange(2*3*4).reshape(2,3,4)
@@ -295,20 +316,66 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.power(x, 2)
         self.numeric_check(forward, x)
 
+    def test_argmax_axes(self):
+        # test1
+        x = np.arange(2*3*5)
+        np.random.shuffle(x)
+        x = x.reshape(2,3,5)
+        got = ag.argmax_axes(x, axes=(1,2))
+
+        want1 = np.zeros((3,5))
+        want2 = np.zeros((3,5))
+        want1[np.unravel_index(np.argmax(x[0]), (3,5))] = 1
+        want2[np.unravel_index(np.argmax(x[1]), (3,5))] = 1
+        self.assertTrue(np.allclose(got[0], want1))
+        self.assertTrue(np.allclose(got[1], want2))
+
+        # test 2
+        x = np.arange(2*3*5*2)
+        np.random.shuffle(x)
+        x = x.reshape(3,2,2,5)
+        got = ag.argmax_axes(x, axes=(0,3))
+        want1 = np.zeros((3,5))
+        want2 = np.zeros((3,5))
+        want3 = np.zeros((3,5))
+        want4 = np.zeros((3,5))
+        want1[np.unravel_index(np.argmax(x[:,0,0,:]), (3,5))] = 1
+        want2[np.unravel_index(np.argmax(x[:,0,1,:]), (3,5))] = 1
+        want3[np.unravel_index(np.argmax(x[:,1,0,:]), (3,5))] = 1
+        want4[np.unravel_index(np.argmax(x[:,1,1,:]), (3,5))] = 1
+        self.assertTrue(np.allclose(got[:,0,0,:], want1))
+        self.assertTrue(np.allclose(got[:,0,1,:], want2))
+        self.assertTrue(np.allclose(got[:,1,0,:], want3))
+        self.assertTrue(np.allclose(got[:,1,1,:], want4))
+
+        # test negative indexing
+        x = np.arange(2*3*5)
+        np.random.shuffle(x)
+        x = x.reshape(2,3,5)
+        got = ag.argmax_axes(x, axes=(-2,-1))
+        want1 = np.zeros((3,5))
+        want2 = np.zeros((3,5))
+        want1[np.unravel_index(np.argmax(x[0]), (3,5))] = 1
+        want2[np.unravel_index(np.argmax(x[1]), (3,5))] = 1
+        self.assertTrue(np.allclose(got[0], want1))
+        self.assertTrue(np.allclose(got[1], want2))
+
     def test_max(self):
         x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
-        for axis in [None, 0, 1, 2]:
-            z = ag.max(x, axis=axis)
-            want = np.max(x.value(), axis=axis)
-            self.assertTrue(np.array_equal(z.value(), want))
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            for keepdims in [True, False]:
+                z = ag.max(x, axis=axis, keepdims=keepdims)
+                want = np.max(x.value(), axis=axis, keepdims=keepdims)
+                self.assertTrue(np.array_equal(z.value(), want))
 
     def test_max_backward(self):
         x = ag.Tensor(np.arange(2*3*4, dtype=np.float64).reshape(2,3,4) + 1.0, requires_grad=True)
-        for axis in [None,0, 1, 2]:
-            def forward(params):
-                self.unravel_params(params, x)
-                return ag.max(x, axis=axis)
-            self.numeric_check(forward, x)
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
+            for keepdims in [True, False]:
+                def forward(params):
+                    self.unravel_params(params, x)
+                    return ag.max(x, axis=axis, keepdims=keepdims)
+                self.numeric_check(forward, x)
 
     @unittest.skip("Numerically unstable for numeric gradient checking")
     def test_softmax(self):
@@ -418,7 +485,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         def forward(params):
             self.unravel_params(params, x1)
             return ag.sqrt(x1)
-        self.numeric_check(forward, x1, do_print=True)
+        self.numeric_check(forward, x1)
 
 
 if __name__ == '__main__':

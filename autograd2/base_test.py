@@ -27,15 +27,6 @@ class TestAutogradOperators(unittest.TestCase):
             x.data = params[count:count+x.data.size].reshape(x.data.shape)
             count += x.data.size
 
-    def test_sum(self):
-        x1 = ag.Tensor(np.arange(3*3).reshape(3,3), dtype=np.float64, requires_grad=True)
-        x2 = ag.Tensor(np.arange(3*3).reshape(3,3) + 9, dtype=np.float64, requires_grad=True)
-        print(x1 * x2)
-        # print(ag.summation(x1))
-        # x2 = ag.Tensor(np.arange(3*3).reshape(3,3) + 9, dtype=np.float64, requires_grad=True)
-        # ls = [x1, x2]
-        # print(sum(ls))
-
     def test_gradient(self):
         x1 = ag.Tensor(2, dtype=np.float64, requires_grad=True)
         x2 = ag.Tensor(5, dtype=np.float64, requires_grad=True)

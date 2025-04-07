@@ -143,7 +143,6 @@ class TestConvFuncs(unittest.TestCase):
                 [0,0,0,0],
                 [0,0,0,0],
         ]])
-        print(got)
         self.assertTrue(np.array_equal(got, want))
 
     @unittest.skip("Test against torch implementation")

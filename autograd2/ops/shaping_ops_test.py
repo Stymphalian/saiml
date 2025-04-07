@@ -38,6 +38,12 @@ class ShapingOperatorsTest(base_gradient_test.NumericalGradientTest):
         ])
         self.assertTrue(np.allclose(y.value(), want))
 
+    def test_transpose_failure_case(self):
+        x = ag.Tensor(np.random.rand(3,5,1,7))
+        y = ag.transpose(x, (0,2,3,1))
+        self.assertEqual(y.shape, (3,1,7,5))
+        y.backward()
+
     def test_transpose_gradient(self):
         np.random.seed(1)
         x1 = ag.Tensor(np.random.rand(5,3,3), requires_grad=True)
