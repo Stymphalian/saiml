@@ -43,7 +43,7 @@ class PositionalEncoding(Module):
         # b,n,k = x.shape
         return ag.add(x, self.w)
     
-class LayerNorm(Module):
+class LayerNorm2(Module):
     def __init__(self, features_shape, eps=1e-8):
         self.features_shape = features_shape
         self.w = ag.Tensor(np.ones(features_shape), requires_grad=True)
@@ -66,27 +66,54 @@ class LayerNorm(Module):
         z = z + self.b
         return z
     
-class FeedForward(Module):
+
+class Linear(Module):
     def __init__(self, input_embed, output_embed):
         super().__init__()
         self.input_embed = input_embed
         self.output_embed = output_embed
-        self.w1 = ag.Tensor(np.random.normal(size=(input_embed, output_embed)), requires_grad=True)
-        self.b1 = ag.Tensor(np.random.normal(size=(1, 1)), requires_grad=True)
-        self.w1.set_name("FeedForward.w1")
-        self.b1.set_name("FeedForward.b1")
-        self.params = [self.w1, self.b1]
+
+        total_size = input_embed * output_embed
+        w = np.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
+        b = np.random.normal(scale=(2.0/total_size), size=(1, 1))
+        self.w = ag.Tensor(w, requires_grad=True)
+        self.b = ag.Tensor(b, requires_grad=True)
+        self.params = [self.w, self.b]
+
+    def forward(self, x):
+        return ag.batch_matmul(x, self.w) + self.b
+    
+class FeedForward(Module):
+    def __init__(self, input_embed, inner_embed, output_embed):
+        super().__init__()
+        self.input_embed = input_embed
+        self.inner_embed = inner_embed
+        self.output_embed = output_embed
+
+        self.dense1 = Linear(input_embed, inner_embed)
+        self.dense2 = Linear(inner_embed, output_embed)
+        self.params = [self.dense1, self.dense2]
+
+        # self.w1 = ag.Tensor(np.random.normal(size=(input_embed, output_embed)), requires_grad=True)
+        # self.b1 = ag.Tensor(np.random.normal(size=(1, 1)), requires_grad=True)
+        # self.w1.set_name("FeedForward.w1")
+        # self.b1.set_name("FeedForward.b1")
+        # self.params = [self.w1, self.b1]
 
     def forward(self, x):
         assert x.ndim == 3
-        # B == Batch
-        # n == sequence length
-        # i == input_emebedding_size
-        # o == output_embedding_size (typically the same as input_embedding_size)
-        z1 = ag.einsum("Bni,io->Bno", x, self.w1)
-        z2 = z1 + self.b1
-        z3 = ag.relu(z2)
-        return z3
+        y = self.dense1(x)
+        y = ag.relu(y)
+        y = self.dense2(y)
+        return y
+        # # B == Batch
+        # # n == sequence length
+        # # i == input_emebedding_size
+        # # o == output_embedding_size (typically the same as input_embedding_size)
+        # z1 = ag.einsum("Bni,io->Bno", x, self.w1)
+        # z2 = z1 + self.b1
+        # z3 = ag.relu(z2)
+        # return z3
 
 class SimpleSelfAttention(Module):
 
@@ -136,37 +163,31 @@ class SimpleSelfAttention(Module):
         y = ag.batch_matmul(w, value) # (n,n)*(n,k) => (n,k)
         return y
 
-class Linear(Module):
-    def __init__(self, input_embed, output_embed):
-        super().__init__()
-        self.input_embed = input_embed
-        self.output_embed = output_embed
-
-        total_size = input_embed * output_embed
-        w = np.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
-        b = np.random.normal(scale=(2.0/total_size), size=(1, 1))
-        self.w = ag.Tensor(w, requires_grad=True)
-        self.b = ag.Tensor(b, requires_grad=True)
-        self.params = [self.w, self.b]
-
-    def forward(self, x):
-        return ag.batch_matmul(x, self.w) + self.b
+# Creates a mask which masks out the future token positions
+# (seq_len, seq_len) returns a top-right diagonal matrix of 1's
+def create_mask_of_future_positions(seq_len):
+    mask = np.ones((seq_len, seq_len))
+    mask = np.triu(mask) > 0
+    return mask
 
 # single pass of attention 
 #  query: (*, seq_len, dim_keyquery)
 #  key  : (*, dim_keyquery, seq_len)
 #  value: (*, seq_len, dim_value)
+#  mask : (seq_len, seq_len)
 def attention(query, key, value, mask=None):
     querykey_size = query.shape[-1]
-    y = ag.batch_matmul(query, key)     # (*, seq_len, seq_len)
-    y = y / np.sqrt(querykey_size)      # (*, seq_len, seq_len)
-    y = ag.softmax(y, axis=(-2,-1))     # (*, seq_len, seq_len)
-    y = ag.batch_matmul(y, value)       # (*, seq_len, dim_value)
+    y = ag.batch_matmul(query, key)         # (*, seq_len, seq_len)
+    y = y / np.sqrt(querykey_size)          # (*, seq_len, seq_len)
+    if mask is not None:
+        y = ag.mask_fill(y, mask, -np.inf)  # (*, seq_len, seq_len)
+    y = ag.softmax(y, axis=(-2,-1))         # (*, seq_len, seq_len)
+    y = ag.batch_matmul(y, value)           # (*, seq_len, dim_value)
     return y
     
 class MultiHeadSelfAttention(Module):
 
-    def __init__(self, embed_dims, dim_keyquery=None, dim_value=None, num_heads=1):
+    def __init__(self, embed_dims, dim_keyquery=None, dim_value=None, num_heads=1, mask=None):
         super().__init__()
         if dim_keyquery is None:
             dim_keyquery = embed_dims
@@ -178,6 +199,7 @@ class MultiHeadSelfAttention(Module):
         self.dim_key = dim_keyquery
         self.dim_value = dim_value
         self.num_heads = num_heads
+        self.mask = mask
 
         assert self.dim_query % self.num_heads == 0
         assert self.dim_key % self.num_heads == 0
@@ -189,13 +211,15 @@ class MultiHeadSelfAttention(Module):
         self.linear = Linear(self.dim_value, self.dim_value)
         self.params = [self.query, self.key, self.value, self.linear]
 
-    def forward(self, x):
-        assert x.ndim == 3
-        b, n, d = x.shape
+    def forward(self, x_query, x_key, x_value):
+        assert x_query.ndim == 3
+        assert x_key.ndim == 3
+        assert x_value.ndim == 3
+        b, n, _ = x_query.shape
 
-        query = self.query.forward(x)   # (b,n,d_kq)
-        key = self.key.forward(x)       # (b,n,d_kq)
-        value = self.value.forward(x)   # (b,n,d_v)
+        query = self.query.forward(x_query)   # (b,n,d_kq)
+        key = self.key.forward(x_key)         # (b,n,d_kq)
+        value = self.value.forward(x_value)   # (b,n,d_v)
         query.set_name("query")
         key.set_name("key")
         value.set_name("value")
@@ -217,7 +241,12 @@ class MultiHeadSelfAttention(Module):
         value_split = ag.transpose(value_split, axis=(0,2,1,3)) # (b,h,n,d_v/h)
         value_split.set_name("value_split_transposed")
 
-        z = attention(query_split, key_split, value_split)      # (b,h,n,dv/h)
+        z = attention(
+            query_split, 
+            key_split, 
+            value_split, 
+            mask=self.mask
+        )                                                       # (b,h,n,dv/h)                                          
         z.set_name("score")
         z = ag.transpose(z, axis=(0,2,1,3))                     # (b,n,h,dv/h)
         z.set_name("score_transposed")
@@ -229,6 +258,7 @@ class MultiHeadSelfAttention(Module):
         return z
 
 
+# TODO: Re-use the ResidualLayer class in the Encoder/Decoder Layers
 class ResidualLayer(Module):
     def __init__(self, sub_layer: Module):
         super().__init__()
@@ -240,39 +270,117 @@ class ResidualLayer(Module):
         y = y + x
         return y
 
-class Transformer(Module):
 
-    def __init__(self, seq_len, embed_dims, num_heads=8):
+# TODO: Allow creating the transformer with different 'value' dimensions
+# This will requires changes to the Encoder/Decoder classes so that
+# the cross attention in the DecoderTransformer will work
+# will also require updating how the residual connections will work due to 
+# mismatching dimensions
+class EncoderLayer(Module):
+    def __init__(self, seq_len, embed_dims, num_heads=8, feedforward_dims=64):
         super().__init__()
         self.seq_len = seq_len
         self.embed_dims = embed_dims
+        self.feedforward_dims = feedforward_dims
         self.num_heads = num_heads
 
-        # TODO: The order of the norm and sublayer doesn't seem right to me,
-        # the diagram in the paper clearly shows "add + norm" happens AFTER
-        # the sublayer operation.
-        self.attention = ResidualLayer(
-            Sequence([
-                LayerNorm((embed_dims,)),
-                MultiHeadSelfAttention(embed_dims, num_heads=self.num_heads)
-            ])
+        self.attention = MultiHeadSelfAttention(
+            embed_dims, 
+            dim_keyquery=embed_dims,
+            dim_value=embed_dims,
+            num_heads=num_heads,
         )
-        self.linear = ResidualLayer(
-            Sequence([
-                LayerNorm((embed_dims,)),
-                FeedForward(embed_dims, embed_dims)
-            ])
-        )
-
+        self.norm1 = LayerNorm2((embed_dims,))
+        self.feedforward = FeedForward(
+            self.embed_dims, 
+            self.feedforward_dims,
+            self.embed_dims)
+        self.norm2 = LayerNorm2((embed_dims,))
+        
         self.params = [
             self.attention,
-            self.linear
+            self.norm1,
+            self.feedforward,
+            self.norm2
         ]
 
     def forward(self, x):
         # b, n, k = x.shape
-        y = self.attention(x)  # b,n,k
-        y = self.linear(y)     # b,n,k
+        r = x
+        y = self.attention.forward(x, x, x)  # (b,n,d_v)
+        y = self.norm1.forward(y)            # (b,n,d_v)
+        y = y + r                            # (b,n,d_v)
+
+        r = y
+        y = self.feedforward.forward(y)      # (b,n,d_v)
+        y = self.norm2.forward(y)            # (b,n,d_v)
+        y = y + r
         return y
                         
 
+class DecoderLayer(Module):
+
+    def __init__(self, seq_len, embed_dims, num_heads=8, feedforward_dims=64):
+        super().__init__()
+        self.seq_len = seq_len
+        self.embed_dims = embed_dims
+        self.num_heads = num_heads
+        self.feedforward_dims = feedforward_dims
+        self.mask = create_mask_of_future_positions(self.seq_len)
+
+        self.norm1 = LayerNorm2((embed_dims,))
+        self.masked_attention = MultiHeadSelfAttention(
+            embed_dims, 
+            dim_keyquery=embed_dims,
+            dim_value=embed_dims,
+            num_heads=num_heads,
+            mask=self.mask
+        )
+        
+        self.norm2 = LayerNorm2((embed_dims,))
+        self.encoder_attention = MultiHeadSelfAttention(
+            embed_dims, 
+            dim_keyquery=embed_dims,
+            dim_value=embed_dims,
+            num_heads=num_heads
+        )
+        
+        self.norm3 = LayerNorm2((embed_dims,))
+        self.feedforward = FeedForward(
+            self.embed_dims, 
+            self.feedforward_dims,
+            self.embed_dims)
+
+        self.params = [
+            self.masked_attention,
+            self.norm1,
+            self.encoder_attention,
+            self.norm2,
+            self.feedforward,
+            self.norm3
+        ]
+
+    def forward(self, x, memory):
+        # b, n, k = x.shape
+
+        # masked multi-attention with residual
+        r = x                                                     # (b,n,k)
+        y = self.masked_attention.forward(x, x, x)                # (b,n,d_v)
+        y = self.norm1.forward(y)                                 # (b,n,d_v)
+        y = y + r                                                 # (b,n,d_v)?
+        # TODO: this residual addition doesn't make sense if 
+        # k (embedding_size) and d_v are different
+
+        # multi-attention with residual, with key,value from encoder
+        r = y                                                     # (b,n,d_v)
+        y = self.encoder_attention.forward(y, memory, memory)     # (b,n,d_v)
+        y = self.norm2.forward(y)                                 # (b,n,d_v)
+        y = y + r                                                 # (b,n,d_v)
+
+        # feed-forward and norm with residual
+        r = y                                                     # (b,n,d_v)
+        y = self.feedforward.forward(y)                           # (b,n,d_v)
+        y = self.norm3.forward(y)                                 # (b,n,d_v)
+        y = y + r                                                 # (b,n,d_v)
+
+        return y                                                  # (b,n,d_v)

@@ -1,4 +1,5 @@
 import unittest
+import math
 import numpy as np
 import autograd2 as ag
 import base_gradient_test
@@ -57,6 +58,14 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         want2 = ag.softmax(x[1])
         self.assertTrue(np.allclose(got[0].value(), want1.value()))
         self.assertTrue(np.allclose(got[1].value(), want2.value()))
+
+    def test_log_softmax(self):
+        np.random.seed(1)
+        x = ag.Tensor(np.random.rand(2,5,2), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x)
+            return ag.log_softmax(x, axis=(1,2))
+        self.numeric_check(forward, x)
     
     def test_sequence(self):
         # np.random.seed(1)
@@ -294,6 +303,35 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             self.unravel_params(params, x1, x2)
             return ag.batch_matmul(x1, x2)
         self.numeric_check(forward, x1, x2)
+
+
+    def test_mask_fill(self):
+        x1 = ag.Tensor(np.arange(3*3, dtype=np.float64).reshape(3,3)+1.0, requires_grad=True)
+        mask = np.triu(np.ones(x1.shape)) > 0
+
+        got = ag.mask_fill(x1, mask, -math.inf)
+        want = np.where(mask, -math.inf, x1.value())
+        self.assertTrue(np.allclose(got.value(), want))
+        got.backward()
+
+    def test_mask_fill_with_different_dimensions(self):
+        x1 = ag.Tensor(np.arange(2*3*3, dtype=np.float64).reshape(2,3,3)+1.0, requires_grad=True)
+        mask = np.array([
+            [
+                [True, False, False],
+                [False, True, False],
+                [False, False, True]
+            ]
+        ])
+
+        got = ag.mask_fill(x1, mask, -math.inf)
+        want1 = np.where(mask, -math.inf, x1.value()[0])
+        want2 = np.where(mask, -math.inf, x1.value()[1])
+        self.assertTrue(np.allclose(got.value()[0], want1))
+        self.assertTrue(np.allclose(got.value()[1], want2))
+        got.backward()
+
+
 
 if __name__ == '__main__':
     unittest.main()

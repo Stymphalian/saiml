@@ -11,6 +11,12 @@ class Sigmoid(Module):
 class Softmax(Module):
     def forward(self, x):
         return ag.softmax(x)
+    
+class LogSoftmax(Module):
+    def forward(self, x):
+        # TODO: Need to batch this.
+        # axis = tuple(range(1, x.ndim))
+        return ag.softmax(x, axis=(-1,))
 
 class ReLU(Module):
     def forward(self, x):

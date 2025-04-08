@@ -1,8 +1,6 @@
 from collections import defaultdict
 
 class ShakespeareDataLoader:
-    EOF = "<EOF>"
-
     def __init__(self, filepath):
         self.filepath = filepath
         self.lines = []
@@ -37,15 +35,14 @@ class ShakespeareDataLoader:
     def num_lines(self):
         return len(self.lines)
 
-    def load_data(self):
+    def load_data(self, train_split_ratio=0.9):
         with open(self.filepath, 'r') as f:
             for line in f:
                 self.process_line(line)
         self.alphabet = sorted(list(self.alphabet))
-        self.alphabet.append(__class__.EOF)
 
         num_lines = self.num_lines()
-        train_end = num_lines // 10
+        train_end = int(train_split_ratio * num_lines)
         self.x_train = self.lines[:train_end]
         self.x_test = self.lines[train_end:]
         return self

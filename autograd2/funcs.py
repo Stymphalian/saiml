@@ -1,5 +1,6 @@
 
 import numpy as np
+import math
 from typing import *
 from utils import conv
 from .base import Operator, Tensor
@@ -159,6 +160,12 @@ def softmax(x, axis=None):
     shiftx = x - ag.max(x, axis=axis, keepdims=True)
     exps = ag.exp(shiftx)
     return exps / ag.summation(exps, axis=axis, keepdims=True)
+def log_softmax(x, axis=None):
+    exps = ag.exp(x)
+    z = ag.summation(exps, axis=axis, keepdims=True)
+    z = ag.log(z)
+    y = x - z
+    return y
 def relu(x):
     return (x + ag.norm(x)) / 2.0
 def max_pool2d(x, kernel_size, stride=1, padding=0):
@@ -225,3 +232,17 @@ def batch_matmul(a, b):
 
 # def convolve2d_input(x, kernel_size, stride=1, padding=0):
 
+def mask_fill(x, mask, value):
+    # TODO: Make this more efficient, unneeded np.where to convert to value_mask
+
+    if isinstance(mask, ag.Tensor):
+        mask = mask.value()
+    if mask.shape != x.shape:
+        mask_shape = (1,) * (x.ndim - mask.ndim) + mask.shape
+        mask = np.reshape(mask, mask_shape)
+        mask = np.broadcast_to(mask, x.shape)
+    value_mask = np.where(mask, value, 0)
+    assert value_mask.shape == x.shape
+
+    z = ag.where(mask, ag.Tensor(value_mask), x)
+    return z

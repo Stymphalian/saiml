@@ -75,7 +75,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         np.random.seed(1)
         batches = 2
         x = ag.arange((batches, 2,3,4,5,6)) + 1.0
-        layer = LayerNorm((x.shape[1:]))
+        layer = LayerNorm2((x.shape[1:]))
         y = layer.forward(x)
         y.backward()
         self.assertEqual(y.shape, x.shape)
@@ -86,7 +86,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
     def test_layer_norm_gradient(self):
         batches = 2
         input_shape = (4,3,2)
-        layer = LayerNorm(input_shape)
+        layer = LayerNorm2(input_shape)
         x = ag.Parameter(np.random.rand(batches, *input_shape))
         def do():
             got = layer.forward(x)  
@@ -102,9 +102,10 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         batches = 2
         seq_len = 3
         embed_dims = 4
+        ff_dims = 10
         output_embed_dims = 5
         x = ag.arange((batches, seq_len, embed_dims)) + 1.0
-        layer = FeedForward(embed_dims, output_embed_dims)
+        layer = FeedForward(embed_dims, ff_dims, output_embed_dims)
         y = layer.forward(x)
         y.backward()
         self.assertEqual(y.shape, (batches, seq_len, output_embed_dims))
@@ -114,9 +115,10 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         batches = 2
         seq_len = 3
         input_dims = 4
+        ff_dims = 10
         output_dims = 4
         x = ag.Parameter(np.random.rand(batches, seq_len, input_dims))
-        layer = FeedForward(input_dims, output_dims)
+        layer = FeedForward(input_dims, ff_dims, output_dims)
         def do():
             got = layer.forward(x)  
             loss = ag.mean(got)
@@ -224,14 +226,14 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         h,d_kq,d_v = 1,7,8
         layer = MultiHeadSelfAttention(d, dim_keyquery=d_kq, dim_value=d_v, num_heads=h)
         x = ag.Parameter(np.random.rand(b,n,d))
-        y = layer.forward(x)
+        y = layer.forward(x,x,x)
 
         y.backward()
         self.assertEquals(y.shape, (b,n,d_v))
 
         def forward(params):
             self.unravel_params(params, x)
-            got = layer.forward(x)  
+            got = layer.forward(x, x, x)  
             loss = ag.mean(got)
             return loss
         self.numeric_check(forward, x)
@@ -241,7 +243,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         seq_len = 3
         embed_dims = 4
         x = ag.Parameter(np.random.rand(batches, seq_len, embed_dims))
-        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
+        layer1 = Sequence([LayerNorm2((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
         layer = ResidualLayer(layer1)
         y = layer.forward(x)
         y.backward()
@@ -251,7 +253,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         seq_len = 3
         embed_dims = 4
         x = ag.Parameter(np.random.rand(batches, seq_len, embed_dims))
-        layer1 = Sequence([LayerNorm((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
+        layer1 = Sequence([LayerNorm2((seq_len, embed_dims)), SimpleSelfAttention(embed_dims)])
         layer = ResidualLayer(layer1)
         def forward(params):
             self.unravel_params(params, x)
@@ -260,7 +262,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
             return loss
         self.numeric_check(forward, x)
 
-    def test_transformer(self):
+    def test_encoder(self):
         np.random.seed(1)
         batches = 2
         seq_len = 3
@@ -270,11 +272,11 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = Transformer(seq_len, embed_dims, num_heads=num_heads)
+        layer = EncoderLayer(seq_len, embed_dims, num_heads=num_heads)
         y = layer.forward(x)
         y.backward()
 
-    def test_transformer_gradient(self):
+    def test_encoder_gradient(self):
         np.random.seed(1)
         batches = 2
         seq_len = 3
@@ -284,7 +286,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = Transformer(seq_len, embed_dims, num_heads=num_heads)
+        layer = EncoderLayer(seq_len, embed_dims, num_heads=num_heads)
         def forward(params):
             self.unravel_params(params, x)
             got = layer.forward(x)  
@@ -294,6 +296,22 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
 
         # dot = ag.generate_graphviz(y)
         # dot.render("graphviz", view=True, format="svg")
+
+    def test_decoder_layer(self):
+        np.random.seed(1)
+        batches = 1
+        seq_len = 3
+        embed_dims = 6
+        num_heads = 2
+        x_shape = (batches, seq_len, embed_dims)
+
+        x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
+        x = ag.Parameter(x.reshape(x_shape) + 1.0)
+        memory = ag.Tensor(np.arange(batches*seq_len*embed_dims).reshape(x_shape) + 1.0)
+
+        layer = DecoderLayer(seq_len, embed_dims, num_heads=num_heads)
+        y = layer.forward(x, memory)
+        y.backward()
         
     
 

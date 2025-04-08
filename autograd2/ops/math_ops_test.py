@@ -3,6 +3,9 @@ import numpy as np
 import autograd2 as ag
 import base_gradient_test
 
+# import autograd.numpy as np2  # Thinly-wrapped numpy
+# from autograd import grad    # The only autograd function you may ever need
+
 class OperatorsTest(base_gradient_test.NumericalGradientTest):
 
     def test_add(self):
@@ -486,6 +489,23 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             self.unravel_params(params, x1)
             return ag.sqrt(x1)
         self.numeric_check(forward, x1)
+
+    def test_where(self):
+        x1 = ag.Tensor(np.ones((3,3))*10, requires_grad=True)
+        x2 = ag.Tensor(np.ones((3,3))*20, requires_grad=True)
+        mask = np.array([[True, False, True], [False, True, False], [True, False, True]], dtype=bool)
+        got = ag.where(mask, x1, x2)
+        want = np.where(mask, x1.value(), x2.value())
+        self.assertTrue(np.array_equal(got.value(), want))
+        got.backward()
+
+        def forward(params):
+            self.unravel_params(params, x1,x2)
+            z = x1 * x2
+            z = ag.where(mask, x1, x2)
+            y = x1 + z
+            return y
+        self.numeric_check(forward, x1, x2)
 
 
 if __name__ == '__main__':

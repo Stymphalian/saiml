@@ -9,7 +9,10 @@ class Sequence(Module):
 
     def forward(self, X):
         for layer in self.layers:
-            X = layer.forward(X)
+            if isinstance(X, (list, tuple)):
+                X = layer.forward(*X)
+            else:
+                X = layer.forward(X)
         return X
     
     def backward(self, context):
