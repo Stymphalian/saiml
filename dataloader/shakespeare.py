@@ -14,7 +14,9 @@ class ShakespeareDataLoader:
         self.freq = defaultdict(int)
         self._num_chars = None
         self.x_train = None
+        self.y_train = None
         self.x_test = None
+        self.y_test = None
 
     def process_line(self, line):
         self.lines.append(line)
@@ -41,10 +43,18 @@ class ShakespeareDataLoader:
                 self.process_line(line)
         self.alphabet = sorted(list(self.alphabet))
 
-        num_lines = self.num_lines()
-        train_end = int(train_split_ratio * num_lines)
-        self.x_train = self.lines[:train_end]
-        self.x_test = self.lines[train_end:]
+        # num_lines = self.num_lines()
+        # train_end = int(train_split_ratio * num_lines)
+
+        lines = "".join(self.lines)
+        self.lines = list(lines)
+        self.x_train = self.lines[:]
+        self.y_train = self.lines[1:]
+
+        # self.x_train = self.lines[:train_end]
+        # self.y_train = self.lines[1:train_end+1]
+        # self.x_test = self.lines[train_end:]
+        # self.y_test = self.lines[train_end+1:]
         return self
 
     

@@ -55,8 +55,11 @@ class Module:
         """Run backwards to update the gradients of all the parameters"""
         learning_rate = context["learning_rate"]
         for param in self.params:
-            # TODO: How to integrate optimizer updates into this?
-            param._data -= learning_rate * param.grad.value()
+            if isinstance(param, ag.Tensor):
+                # TODO: How to integrate optimizer updates into this?
+                param._data -= learning_rate * param.grad.value()
+            elif isinstance(param, Module):
+                param.backward(context)
 
     def unpack_params(self):
         return _unpack_params(self.params)

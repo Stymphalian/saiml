@@ -180,6 +180,9 @@ class Tensor(Node):
         else:
             return ag.math_ops.div(ag.constant(other), self)
         
+    def __or__(self, other):
+        return ag.math_ops.bitwise_or(self, other)
+        
     @property
     def T(self):
         return self.transpose()

@@ -488,6 +488,19 @@ class TensorWhere(Operator):
         da = where(self.mask, outGrad, outgrad_zero)
         db = where(self.mask, outgrad_zero, outGrad)
         return da, db
+    
+class TensorBitwiseOr(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        a = inputs[0].value()
+        b = inputs[1].value()
+        return a | b
+    def gradients(self, node, outGrad):
+        assert outGrad.shape == node.inputs[0].shape
+        a = node.inputs[0]
+        b = node.inputs[1]
+        assert a.shape == b.shape
+        assert a.shape == outGrad.shape
+        return outGrad, outGrad
 
     
 #################################################
@@ -877,6 +890,8 @@ def sqrt(a):
     return TensorSqrt().tensor(a)
 def where(mask, a, b):
     return TensorWhere(mask).tensor(a, b)
+def bitwise_or(a, b):
+    return TensorBitwiseOr().tensor(a, b)
 
 def reshape(a, shape):
     return TensorReshape(shape).tensor(a)

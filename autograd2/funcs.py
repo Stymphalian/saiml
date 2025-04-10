@@ -143,10 +143,10 @@ class TensorMaxPool(Operator):
 
 # def cross_entropy_loss(pred, true):
 #     return TensorCrossEntropyLoss().tensor(pred, true)
-def mean_square_error(y_pred, y_true):
-    return ag.mean(ag.power(y_true - y_pred, 2))
-def cross_entropy_loss(y_pred, y_true):
-    return -ag.summation(y_true * ag.log(y_pred))
+def mean_square_error(y_pred, y_true, axis=None):
+    return ag.mean(ag.power(y_true - y_pred, 2), axis=axis)
+def cross_entropy_loss(y_pred, y_true, axis=None):
+    return -ag.summation(y_true * ag.log(y_pred), axis=axis)
 def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
     return TensorConvolve2D(stride, padding, dilate).tensor(x, kernel)
 def convolve2d_transpose(x, kernel, stride=1, padding=0, outer_padding=0):
@@ -234,6 +234,7 @@ def batch_matmul(a, b):
 
 def mask_fill(x, mask, value):
     # TODO: Make this more efficient, unneeded np.where to convert to value_mask
+    assert isinstance(mask, ag.Tensor)
 
     if isinstance(mask, ag.Tensor):
         mask = mask.value()

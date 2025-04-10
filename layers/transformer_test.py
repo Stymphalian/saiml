@@ -190,22 +190,6 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
             return loss
         self.numeric_check(forward, x)
 
-    def test_dotproduct_self_attention_gradient(self):
-        b = 1
-        n = 2
-        h = 3
-        dq = 4
-        dv = 5
-        
-        query = ag.Parameter(np.random.rand(b,h,n,dq))
-        key = ag.Parameter(np.random.rand(b,h,dq,n))
-        value = ag.Parameter(np.random.rand(b,h,n,dv))
-        def forward(params):
-            self.unravel_params(params, query, key, value)
-            got = attention(query, key, value)
-            loss = ag.mean(got)
-            return loss
-        self.numeric_check(forward, query, key, value)
 
     def test_dotproduct_self_attention(self):
         b = 1
@@ -217,23 +201,50 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         query = ag.Parameter(np.random.rand(b,h,n,dq))
         key = ag.Parameter(np.random.rand(b,h,dq,n))
         value = ag.Parameter(np.random.rand(b,h,n,dv))
-        y = attention(query, key, value)
+        mask = ag.Tensor(create_mask_of_future_positions(n))
+        y = attention(query, key, value, mask=mask)
         y.backward()
         self.assertEqual(y.shape, (b,h,n,dv))
+
+    def test_dotproduct_self_attention_gradient(self):
+        b = 1
+        n = 2
+        h = 3
+        dq = 4
+        dv = 5
+        
+        query = ag.Parameter(np.random.rand(b,h,n,dq))
+        key = ag.Parameter(np.random.rand(b,h,dq,n))
+        value = ag.Parameter(np.random.rand(b,h,n,dv))
+        mask = ag.Tensor(create_mask_of_future_positions(n))
+        def forward(params):
+            self.unravel_params(params, query, key, value)
+            got = attention(query, key, value, mask=mask)
+            loss = ag.mean(got)
+            return loss
+        self.numeric_check(forward, query, key, value)
 
     def test_multihead_self_attention(self):
         b,n,d = 3,5,6
         h,d_kq,d_v = 1,7,8
-        layer = MultiHeadSelfAttention(d, dim_keyquery=d_kq, dim_value=d_v, num_heads=h)
+        future_mask = ag.Tensor(create_mask_of_future_positions(n))
+        layer = MultiHeadSelfAttention(
+            d, dim_keyquery=d_kq, dim_value=d_v, num_heads=h, mask=future_mask)
+        x_mask = np.array([
+            [0,0,0,0,0],
+            [0,1,1,1,1],
+            [0,0,0,1,1]
+        ]) == 1
+        x_mask = ag.Tensor(x_mask)
         x = ag.Parameter(np.random.rand(b,n,d))
-        y = layer.forward(x,x,x)
+        y = layer.forward(x,x,x, x_mask=x_mask)
 
         y.backward()
         self.assertEquals(y.shape, (b,n,d_v))
 
         def forward(params):
             self.unravel_params(params, x)
-            got = layer.forward(x, x, x)  
+            got = layer.forward(x, x, x, x_mask=x_mask)  
             loss = ag.mean(got)
             return loss
         self.numeric_check(forward, x)
@@ -272,7 +283,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = EncoderLayer(seq_len, embed_dims, num_heads=num_heads)
+        layer = EncoderBlock(seq_len, embed_dims, num_heads=num_heads)
         y = layer.forward(x)
         y.backward()
 
@@ -286,7 +297,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         x = np.arange(batches*seq_len*embed_dims, dtype=np.float64)
         x = x.reshape((batches, seq_len, embed_dims)) + 1.0
         x = ag.Parameter(x)
-        layer = EncoderLayer(seq_len, embed_dims, num_heads=num_heads)
+        layer = EncoderBlock(seq_len, embed_dims, num_heads=num_heads)
         def forward(params):
             self.unravel_params(params, x)
             got = layer.forward(x)  
@@ -309,7 +320,7 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
         x = ag.Parameter(x.reshape(x_shape) + 1.0)
         memory = ag.Tensor(np.arange(batches*seq_len*embed_dims).reshape(x_shape) + 1.0)
 
-        layer = DecoderLayer(seq_len, embed_dims, num_heads=num_heads)
+        layer = DecoderBlock(seq_len, embed_dims, num_heads=num_heads)
         y = layer.forward(x, memory)
         y.backward()
         

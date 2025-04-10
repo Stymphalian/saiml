@@ -507,6 +507,19 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return y
         self.numeric_check(forward, x1, x2)
 
+    def test_bitwise_or(self):
+        x1 = ag.Tensor(np.random.randint(0, 2, size=(3,3)) == 1, requires_grad=True)
+        x2 = ag.Tensor(np.random.randint(0, 2, size=(3,3)) == 1, requires_grad=True)
+        got = ag.bitwise_or(x1, x2)
+        want = np.bitwise_or(x1.value(), x2.value())
+        self.assertTrue(np.array_equal(got.value(), want))
+        got.backward()
+
+        # def forward(params):
+        #     self.unravel_params(params, x1,x2)
+        #     return ag.bitwise_or(x1, x2)
+        # self.numeric_check(forward, x1, x2)
+
 
 if __name__ == '__main__':
     unittest.main()

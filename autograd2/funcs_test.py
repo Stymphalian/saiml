@@ -309,7 +309,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         x1 = ag.Tensor(np.arange(3*3, dtype=np.float64).reshape(3,3)+1.0, requires_grad=True)
         mask = np.triu(np.ones(x1.shape)) > 0
 
-        got = ag.mask_fill(x1, mask, -math.inf)
+        got = ag.mask_fill(x1, ag.Tensor(mask), -math.inf)
         want = np.where(mask, -math.inf, x1.value())
         self.assertTrue(np.allclose(got.value(), want))
         got.backward()
@@ -324,7 +324,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             ]
         ])
 
-        got = ag.mask_fill(x1, mask, -math.inf)
+        got = ag.mask_fill(x1, ag.Tensor(mask), -math.inf)
         want1 = np.where(mask, -math.inf, x1.value()[0])
         want2 = np.where(mask, -math.inf, x1.value()[1])
         self.assertTrue(np.allclose(got.value()[0], want1))

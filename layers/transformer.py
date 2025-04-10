@@ -167,7 +167,16 @@ class SimpleSelfAttention(Module):
 # (seq_len, seq_len) returns a top-right diagonal matrix of 1's
 def create_mask_of_future_positions(seq_len):
     mask = np.ones((seq_len, seq_len))
-    mask = np.triu(mask) > 0
+    mask = np.tril(mask) == 0
+    return mask
+    # mask = np.ones((seq_len, seq_len))
+    # mask = np.triu(mask) > 0
+    # return mask
+
+def extend_mask(in_mask, seq_len):
+    # b,n,..., seq_len
+    mask = np.reshape(in_mask, (-1, 1, seq_len))
+    mask = np.broadcast_to(mask, in_mask.shape + (seq_len,))
     return mask
 
 # single pass of attention 
@@ -211,7 +220,7 @@ class MultiHeadSelfAttention(Module):
         self.linear = Linear(self.dim_value, self.dim_value)
         self.params = [self.query, self.key, self.value, self.linear]
 
-    def forward(self, x_query, x_key, x_value):
+    def forward(self, x_query, x_key, x_value, x_mask:ag.Tensor=None):
         assert x_query.ndim == 3
         assert x_key.ndim == 3
         assert x_value.ndim == 3
@@ -241,11 +250,22 @@ class MultiHeadSelfAttention(Module):
         value_split = ag.transpose(value_split, axis=(0,2,1,3)) # (b,h,n,d_v/h)
         value_split.set_name("value_split_transposed")
 
+        # merge the masks
+        mask = self.mask                                        # (n,n)
+        if x_mask is not None:
+            assert isinstance(x_mask, ag.Tensor)
+            x_mask = x_mask.value()                             # (b,n)
+            x_mask = extend_mask(x_mask, n)                     # (b,n,n)
+            assert x_mask.shape == (b,n,n)
+            mask = mask.value() | x_mask                        # (b,n,n)
+            mask = np.reshape(mask, (b,1,n,n))                  # (b,h,n,n)
+            mask = ag.Tensor(mask)
+
         z = attention(
             query_split, 
             key_split, 
             value_split, 
-            mask=self.mask
+            mask=mask
         )                                                       # (b,h,n,dv/h)                                          
         z.set_name("score")
         z = ag.transpose(z, axis=(0,2,1,3))                     # (b,n,h,dv/h)
@@ -276,8 +296,14 @@ class ResidualLayer(Module):
 # the cross attention in the DecoderTransformer will work
 # will also require updating how the residual connections will work due to 
 # mismatching dimensions
-class EncoderLayer(Module):
-    def __init__(self, seq_len, embed_dims, num_heads=8, feedforward_dims=64):
+class EncoderBlock(Module):
+    def __init__(
+        self,
+        seq_len,
+        embed_dims,
+        num_heads=8,
+        feedforward_dims=64
+    ):
         super().__init__()
         self.seq_len = seq_len
         self.embed_dims = embed_dims
@@ -298,35 +324,44 @@ class EncoderLayer(Module):
         self.norm2 = LayerNorm2((embed_dims,))
         
         self.params = [
-            self.attention,
             self.norm1,
+            self.attention,
+            self.norm2,
             self.feedforward,
-            self.norm2
         ]
 
     def forward(self, x):
         # b, n, k = x.shape
         r = x
-        y = self.attention.forward(x, x, x)  # (b,n,d_v)
-        y = self.norm1.forward(y)            # (b,n,d_v)
+        y = self.norm1.forward(x)            # (b,n,d_v)
+        y = self.attention.forward(y, y, y)  # (b,n,d_v)
         y = y + r                            # (b,n,d_v)
 
         r = y
-        y = self.feedforward.forward(y)      # (b,n,d_v)
         y = self.norm2.forward(y)            # (b,n,d_v)
+        y = self.feedforward.forward(y)      # (b,n,d_v)
         y = y + r
         return y
                         
 
-class DecoderLayer(Module):
+class DecoderBlock(Module):
+    # TODO: Add params for dim_keyquery and dim_value
 
-    def __init__(self, seq_len, embed_dims, num_heads=8, feedforward_dims=64):
+    def __init__(
+            self,
+            seq_len,
+            embed_dims,
+            num_heads=8,
+            feedforward_dims=64,
+            include_encoder_attention=True
+        ):
         super().__init__()
         self.seq_len = seq_len
         self.embed_dims = embed_dims
         self.num_heads = num_heads
         self.feedforward_dims = feedforward_dims
-        self.mask = create_mask_of_future_positions(self.seq_len)
+        self.include_encoder_attention = include_encoder_attention
+        self.mask = ag.Tensor(create_mask_of_future_positions(self.seq_len))
 
         self.norm1 = LayerNorm2((embed_dims,))
         self.masked_attention = MultiHeadSelfAttention(
@@ -336,14 +371,8 @@ class DecoderLayer(Module):
             num_heads=num_heads,
             mask=self.mask
         )
-        
-        self.norm2 = LayerNorm2((embed_dims,))
-        self.encoder_attention = MultiHeadSelfAttention(
-            embed_dims, 
-            dim_keyquery=embed_dims,
-            dim_value=embed_dims,
-            num_heads=num_heads
-        )
+        self.norm2 = None
+        self.encoder_attention = None
         
         self.norm3 = LayerNorm2((embed_dims,))
         self.feedforward = FeedForward(
@@ -352,35 +381,46 @@ class DecoderLayer(Module):
             self.embed_dims)
 
         self.params = [
-            self.masked_attention,
             self.norm1,
-            self.encoder_attention,
-            self.norm2,
+            self.masked_attention,
+            self.norm3,
             self.feedforward,
-            self.norm3
         ]
 
-    def forward(self, x, memory):
+        if self.include_encoder_attention:
+            self.norm2 = LayerNorm2((embed_dims,))
+            self.encoder_attention = MultiHeadSelfAttention(
+                embed_dims, 
+                dim_keyquery=embed_dims,
+                dim_value=embed_dims,
+                num_heads=num_heads
+            )
+            self.params += [
+                self.norm2,
+                self.encoder_attention,
+            ]
+
+    def forward(self, x, memory=None, x_mask=None):
         # b, n, k = x.shape
 
         # masked multi-attention with residual
         r = x                                                     # (b,n,k)
-        y = self.masked_attention.forward(x, x, x)                # (b,n,d_v)
-        y = self.norm1.forward(y)                                 # (b,n,d_v)
-        y = y + r                                                 # (b,n,d_v)?
-        # TODO: this residual addition doesn't make sense if 
-        # k (embedding_size) and d_v are different
+        y = self.norm1.forward(x)                                 # (b,n,k)
+        y = self.masked_attention.forward(y,y,y, x_mask=x_mask)   # (b,n,d_v)
+        y = y + r                                                 # (b,n,d_v)
 
         # multi-attention with residual, with key,value from encoder
-        r = y                                                     # (b,n,d_v)
-        y = self.encoder_attention.forward(y, memory, memory)     # (b,n,d_v)
-        y = self.norm2.forward(y)                                 # (b,n,d_v)
-        y = y + r                                                 # (b,n,d_v)
+        if self.include_encoder_attention:
+            assert memory is not None
+            r = y                                                 # (b,n,d_v)
+            y = self.norm2.forward(y)                             # (b,n,d_v)
+            y = self.encoder_attention.forward(y, memory, memory) # (b,n,d_v)
+            y = y + r                                             # (b,n,d_v)
 
         # feed-forward and norm with residual
         r = y                                                     # (b,n,d_v)
-        y = self.feedforward.forward(y)                           # (b,n,d_v)
         y = self.norm3.forward(y)                                 # (b,n,d_v)
+        y = self.feedforward.forward(y)                           # (b,n,d_v)
         y = y + r                                                 # (b,n,d_v)
 
         return y                                                  # (b,n,d_v)

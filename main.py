@@ -7,180 +7,128 @@ import utils
 import autograd2 as ag
 from layers import *
 from dataloader.shakespeare import ShakespeareDataLoader
-from tokenizer import Tokenizer
+# from tokenizer import Tokenizer
+import tokenizer
 
 
-class Encoder(Sequence):
-    def __init__(self, num_layers, seq_len, embed_dims, num_heads=8):
-        self.num_layers = num_layers
-        self.seq_len = seq_len
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-
-        layers = []
-        for _ in range(num_layers):
-            t = EncoderLayer(
-                self.seq_len,
-                self.embed_dims,
-                num_heads=self.num_heads,
-            )
-            layers.append(t)
-        layers.append(LayerNorm2((self.embed_dims,)))
-        super().__init__(layers)
-    
-class Decoder(Module):
-    def __init__(self, num_layers, seq_len, embed_dims, num_heads=8):
-        super().__init__()
-        self.num_layers = num_layers
-        self.seq_len = seq_len
-        self.embed_dims = embed_dims
-        self.num_heads = num_heads
-
-        self.decoders = []
-        for _ in range(num_layers):
-            t = DecoderLayer(
-                self.seq_len,
-                self.embed_dims,
-                num_heads=self.num_heads,
-            )
-            self.decoders.append(t)
-        self.norm = LayerNorm2((self.embed_dims,))
-
-        self.params = self.decoders + [self.norm]
-
-    def forward(self, x, memory):
-        for layer in self.decoders:
-            x = layer.forward(x, memory)
-        x = self.norm.forward(x)
-        return x
-
-class Transformer(Module):
+class CharGPT(Module):
     # TODO: Make this more general and allow users to pass in the encoder/decoder submodels
     # TODO: Make an abstract EncoderDecoder model which transform should sub-class from.
     def __init__(
             self, 
             seq_len, 
-            source_vocab, 
-            target_vocab=None,
+            vocab_len, 
             embed_dims=64,
-            encoder_layers=2,
             decoder_layers=2,
             attention_heads=4,
         ):
         super().__init__()
         self.seq_len = seq_len
-        self.source_vocab = source_vocab
-        self.target_vocab = source_vocab if target_vocab is None else target_vocab
+        self.vocab_len = vocab_len
         self.embed_dims = embed_dims
-        self.encoder_layers = encoder_layers
         self.decoder_layers = decoder_layers
         self.attention_heads = attention_heads
 
         self.source_embedding = Sequence([
-            Embedding(len(self.source_vocab), self.embed_dims),
-            PositionalEncoding(seq_len, self.embed_dims),
-        ])
-        self.target_embedding = Sequence([
-            Embedding(len(self.target_vocab), self.embed_dims),
+            Embedding(self.vocab_len, self.embed_dims),
             PositionalEncoding(seq_len, self.embed_dims),
         ])
 
-        self.encoder = Encoder(
-            self.encoder_layers, 
-            seq_len=seq_len, 
-            embed_dims=embed_dims,
-            num_heads=self.attention_heads,
-        )
-        self.decoder = Decoder(
-            self.decoder_layers, 
-            seq_len=seq_len, 
-            embed_dims=embed_dims,
-            num_heads=self.attention_heads,
-        )
-        self.generator = Sequence([
-            Linear(self.embed_dims, len(self.target_vocab)),
-            # TODO: softmax must be done over all the inputs?
-            # or just retrieve the last one?
+        self.blocks = [
+            DecoderBlock(
+                seq_len,
+                self.embed_dims,
+                num_heads=self.attention_heads,
+                include_encoder_attention=False
+            ) for _ in range(self.decoder_layers)
+        ]
+        self.norm = LayerNorm2((self.embed_dims,))
+
+        self.logits = Sequence([
+            Linear(self.embed_dims, self.vocab_len),
             LogSoftmax()
         ])
 
-    def forward(self, x):
-        # embeddings
-        src = self.source_embedding.forward(x)         # (b,n,d_embed)
-        target = self.target_embedding.forward(x)      # (b,n,d_embed)
+        self.params = [
+            self.source_embedding,
+            self.blocks,
+            self.norm,
+            self.logits
+        ]
 
-        # encoder/decoder
-        memory = self.encoder.forward(src)             # (b,n,d_v)
-        z = self.decoder.forward(target, memory)       # (b,n,d_v2)
+    def forward(self, x, x_mask=None):
+        # embeddings
+        y = self.source_embedding.forward(x)         # (b,n,d_embed)
+
+        # encoder
+        for block in self.blocks:
+            y = block.forward(y, x_mask)             # (b,n,d_embed)
+        y = self.norm.forward(y)                     # (b,n,d_embed)
 
         # Convert to logits
-        z = self.generator.forward(z)                  # (b,d_vocab)
-        return z
+        y = self.logits.forward(y)                   # (b,d_vocab)
+        return y
     
-def get_batches(tokenizer: Tokenizer, lines, seq_len, batch_size):
-    seq_len2 = seq_len - 1 # leave room for the EOS token
+    def loss(self, y_pred, y_true):
+        b, n, d_value = y_pred.shape
+        # loss = ag.cross_entropy_loss(y_pred, y_true)
+        loss = ag.cross_entropy_loss(y_pred, y_true, axis=(2,))
+        # loss = ag.summation(loss, axis=1)
+        loss = ag.mean(loss)
+        return loss
+    
 
-    batch = []
-    last_line = ""
-    for next_line in lines:
-        last_line += next_line
+def train(
+        model: CharGPT,
+        x_train_batches,
+        y_train_batches,
+        number_epochs=2, 
+        learning_rate=5e-4):
+    
+    context = {"learning_rate": learning_rate}
+    for epoch in range(number_epochs):
+        error = 0
+        for batch_num, ((x, x_mask), (y, y_mask)) in enumerate(zip(x_train_batches, y_train_batches)):
+            pred = model.forward(x, x_mask=x_mask)
+            loss = model.loss(pred, y)
+            loss.backward()
+            model.backward(context)
+            error += loss.value()
+            print("Batch Number {:3d}: error {}".format(batch_num, loss.value()))
+        error /= len(x_train_batches)
 
-        # split last_line into batches of seq_len
-        line_batch = []
-        while len(last_line) >= seq_len2:
-            line_batch.append(last_line[:seq_len2])
-            last_line = last_line[seq_len2:]
+        print(f"Epoch {epoch+1}/{number_epochs} - Error: {error}")
 
-        for line in line_batch:
-            line = list(line)
-            line = tokenizer.pad_line(line, seq_len)
-            x = tokenizer.encode(line)
-            
-            assert x.shape == (seq_len, len(tokenizer.vocab))
-            batch.append(x)
-
-            if len(batch) >= batch_size:
-                yield np.array(batch)
-                batch = []
-
-    if len(last_line) > 0:
-        last_line = list(last_line)
-        last_line = tokenizer.pad_line(last_line, seq_len)
-        x = tokenizer.encode(last_line)
-        assert x.shape == (seq_len, len(tokenizer.vocab))
-        batch.append(x)
-
-    if len(batch) > 0:
-        yield np.array(batch)
     
 def main():
     dl = ShakespeareDataLoader("data/shakespeare.txt")
     dl.load_data()
+    tok = tokenizer.Tokenizer(dl.vocab)
 
-    num_batches = 2
-    seq_len = 10
-    tok = Tokenizer(dl.vocab)
-    batches = get_batches(tok , dl.x_train, seq_len, num_batches)
-    b1 = next(batches)
-    print(b1.shape)
+    seq_len = 64
+    embed_dims = 128
+    batch_size = 32
+    model = CharGPT(seq_len, len(tok.vocab), embed_dims=embed_dims)
 
-    embed_dims = 32
-    model = Transformer(seq_len, tok.vocab, embed_dims=embed_dims)
-    y = model.forward(ag.Tensor(b1))
-    y.backward()
-    print(y.shape)
-    ag.render_graphviz(y)
+    x_train_batches = tokenizer.get_batches(dl.x_train, seq_len-1, batch_size)
+    y_train_batches = tokenizer.get_batches(dl.y_train, seq_len-1, batch_size)
+    x_train_batches = [
+        tokenizer.convert_batches_to_numpy_with_mask(b1, tok, seq_len)
+        for b1 in x_train_batches
+    ]
+    y_train_batches = [
+        tokenizer.convert_batches_to_numpy_with_mask(b1, tok, seq_len)
+        for b1 in y_train_batches
+    ]
+    x_train_batches = [(ag.Tensor(x), ag.Tensor(x_mask)) for x, x_mask in x_train_batches]
+    y_train_batches = [(ag.Tensor(y), ag.Tensor(y_mask)) for y, y_mask in y_train_batches]
 
-    # encoder = Encoder(2, seq_len, embed_dims)
-    # decoder = Decoder(2, seq_len, embed_dims)
-    # x = ag.Parameter(np.random.rand(1, seq_len, embed_dims))
-    # y = encoder.forward(x)
-    # y = decoder.forward(y)
+    train(model, x_train_batches, y_train_batches)
+
+    # y = model.forward(ag.Tensor(b1), ag.Tensor(b1_mask))
     # y.backward()
-    # print(y)
+    # print(y.shape)
     # ag.render_graphviz(y)
-    
-    # print(dl.x[:100])
 
 if __name__ == "__main__":
     main()
