@@ -53,13 +53,15 @@ class Module:
 
     def backward(self, context):
         """Run backwards to update the gradients of all the parameters"""
-        learning_rate = context["learning_rate"]
+        opt = context["optimizer"]
         for param in self.params:
             if isinstance(param, ag.Tensor):
-                # TODO: How to integrate optimizer updates into this?
-                param._data -= learning_rate * param.grad.value()
+                # TODO: How to remove the direct change of the _data
+                param._data = opt.step(param, param.grad).value()
             elif isinstance(param, Module):
                 param.backward(context)
+            else:
+                raise Exception(f"Unknown param type {type(param)}")
 
     def unpack_params(self):
         return _unpack_params(self.params)

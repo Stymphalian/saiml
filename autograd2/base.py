@@ -188,12 +188,14 @@ class Tensor(Node):
         return self.transpose()
     def transpose(self):
         return ag.math_ops.transpose(self)
-        
+    
     def reshape(self, shape):
         return ag.math_ops.reshape(self, shape)
     def flatten(self):
         return ag.math_ops.reshape(self, (-1,))
 
+    def detach(self):
+        return ag.Tensor(self.value(), requires_grad=False)
     def ones(self):
         return ones(self.shape, dtype=self.dtype)
     def zeros(self):

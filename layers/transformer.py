@@ -6,12 +6,15 @@ from .dense import Dense
 from .sequence import Sequence
 
 
+def np_normal(shape):
+    return np.random.normal(scale=(2.0/np.prod(shape)), size=shape)
+
 class Embedding(Module):
     def __init__(self, vocab_size, embed_dims):
         super().__init__()
         self.vocab_size = vocab_size
         self.embed_dims = embed_dims
-        self.w = ag.Tensor(np.random.normal(size=(vocab_size, embed_dims)), requires_grad=True)
+        self.w = ag.Tensor(np_normal((vocab_size, embed_dims)), requires_grad=True)
         self.w.set_name("Embedding.w")
         self.params = [self.w]
 
@@ -25,7 +28,7 @@ class PositionalEncoding(Module):
         self.seq_len = seq_len
         self.embed_size = embed_size
 
-        w = np.random.normal(size=(seq_len, embed_size))
+        w = np_normal((seq_len, embed_size))
         for pos in range(seq_len):
             for k in range(embed_size):
                 if k%2 == 0:
@@ -94,8 +97,8 @@ class FeedForward(Module):
         self.dense2 = Linear(inner_embed, output_embed)
         self.params = [self.dense1, self.dense2]
 
-        # self.w1 = ag.Tensor(np.random.normal(size=(input_embed, output_embed)), requires_grad=True)
-        # self.b1 = ag.Tensor(np.random.normal(size=(1, 1)), requires_grad=True)
+        # self.w1 = ag.Tensor(np_normal((input_embed, output_embed)), requires_grad=True)
+        # self.b1 = ag.Tensor(np_normal((1, 1)), requires_grad=True)
         # self.w1.set_name("FeedForward.w1")
         # self.b1.set_name("FeedForward.b1")
         # self.params = [self.w1, self.b1]
@@ -124,12 +127,12 @@ class SimpleSelfAttention(Module):
             dim = embed_dims
         self.dim = dim
 
-        k = np.random.normal(size=(embed_dims, dim))
-        kb = np.random.normal(size=(1,1))
-        q = np.random.normal(size=(embed_dims, dim))
-        qb = np.random.normal(size=(1,1))
-        v = np.random.normal(size=(embed_dims, dim))
-        vb = np.random.normal(size=(1,1))
+        k = np_normal((embed_dims, dim))
+        kb = np_normal((1,1))
+        q = np_normal((embed_dims, dim))
+        qb = np_normal((1,1))
+        v = np_normal((embed_dims, dim))
+        vb = np_normal((1,1))
         self.k = ag.Tensor(k, requires_grad=True, name="k")
         self.kb = ag.Tensor(kb, requires_grad=True, name="kb")
         self.q = ag.Tensor(q, requires_grad=True, name="q")

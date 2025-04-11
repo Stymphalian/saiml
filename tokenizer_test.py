@@ -63,22 +63,11 @@ class TestTokenizer(unittest.TestCase):
     def test_get_batches(self):
         seq_len = 6
         batch_size = 3
-        lines = [
-            "abcabcabc",
-            "cdeabcde",
-            "",
-            "abd"
-        ]
+        lines = list("abcabcabccdeabcdeabd")
         batches = list(tokenizer.get_batches(lines, seq_len, batch_size))
         wants = [
-            [
-                ['a', 'b', 'c', 'a', 'b', 'c'],
-                ['a', 'b', 'c', 'c', 'd', 'e'], 
-                ['a', 'b', 'c', 'd', 'e', 'a'],
-            ],
-            [
-                ['b', 'd']       
-            ]
+            ['abcabc', 'abccde', 'abcdea'],
+            ['bd'],
         ]
         for got, want in zip(batches, wants):
             self.assertEqual(got, want)

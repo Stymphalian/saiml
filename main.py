@@ -9,6 +9,7 @@ from layers import *
 from dataloader.shakespeare import ShakespeareDataLoader
 # from tokenizer import Tokenizer
 import tokenizer
+import optimizer
 
 
 class CharGPT(Module):
@@ -49,12 +50,10 @@ class CharGPT(Module):
             LogSoftmax()
         ])
 
-        self.params = [
-            self.source_embedding,
-            self.blocks,
-            self.norm,
-            self.logits
-        ]
+        self.params = [self.source_embedding] 
+        self.params.extend(self.blocks)
+        self.params += [self.norm, self.logits]
+
 
     def forward(self, x, x_mask=None):
         # embeddings
@@ -85,14 +84,22 @@ def train(
         number_epochs=2, 
         learning_rate=5e-4):
     
-    context = {"learning_rate": learning_rate}
+    # context = {"learning_rate": learning_rate}
+    # context = {"optimizer": optimizer.SGDMomentum(lr=learning_rate, momentum=0.9)}
+    context = {"optimizer": optimizer.Adam(lr=learning_rate)}
+    lr_decay = 1
     for epoch in range(number_epochs):
         error = 0
+        context["optimizer"].iteration = 1
+        # context["optimizer"].learning_rate = (1 / (1 + lr_decay * epoch)) * learning_rate
+        print("Learning Rate: {}".format(context["optimizer"].learning_rate))
+
         for batch_num, ((x, x_mask), (y, y_mask)) in enumerate(zip(x_train_batches, y_train_batches)):
             pred = model.forward(x, x_mask=x_mask)
             loss = model.loss(pred, y)
             loss.backward()
             model.backward(context)
+            context["optimizer"].iteration += 1
             error += loss.value()
             print("Batch Number {:3d}: error {}".format(batch_num, loss.value()))
         error /= len(x_train_batches)
@@ -101,6 +108,7 @@ def train(
 
     
 def main():
+    np.random.rand(0)
     dl = ShakespeareDataLoader("data/shakespeare.txt")
     dl.load_data()
     tok = tokenizer.Tokenizer(dl.vocab)
