@@ -1,13 +1,11 @@
-import numpy as np
+import numpy
 import autograd2 as ag
 from loss import *
 from .module import Module
-from .dense import Dense
-from .sequence import Sequence
 
 
 def np_normal(shape):
-    return np.random.normal(scale=(2.0/np.prod(shape)), size=shape)
+    return xp.random.normal(scale=(2.0/numpy.prod(shape)), size=shape)
 
 class Embedding(Module):
     def __init__(self, vocab_size, embed_dims):
@@ -32,10 +30,10 @@ class PositionalEncoding(Module):
         for pos in range(seq_len):
             for k in range(embed_size):
                 if k%2 == 0:
-                    z1 = np.sin(pos / np.power(10000, (2*k) // self.embed_size))
+                    z1 = xp.sin(pos / xp.power(10000, (2*k) // self.embed_size))
                     w[pos][k] = z1 
                 else:
-                    z2 = np.cos(pos / np.power(10000, (2*k) // self.embed_size))
+                    z2 = xp.cos(pos / xp.power(10000, (2*k) // self.embed_size))
                     w[pos][k] = z2
         self.w = ag.Tensor(w, requires_grad=True)
         self.w.set_name("PositionalEncoding.w")
@@ -49,8 +47,8 @@ class PositionalEncoding(Module):
 class LayerNorm2(Module):
     def __init__(self, features_shape, eps=1e-8):
         self.features_shape = features_shape
-        self.w = ag.Tensor(np.ones(features_shape), requires_grad=True)
-        self.b = ag.Tensor(np.zeros(features_shape), requires_grad=True)
+        self.w = ag.Tensor(xp.ones(features_shape), requires_grad=True)
+        self.b = ag.Tensor(xp.zeros(features_shape), requires_grad=True)
         self.params = [self.w, self.b]
         self.epsilon = ag.Tensor(eps)
     
@@ -77,8 +75,8 @@ class Linear(Module):
         self.output_embed = output_embed
 
         total_size = input_embed * output_embed
-        w = np.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
-        b = np.random.normal(scale=(2.0/total_size), size=(1, 1))
+        w = xp.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
+        b = xp.random.normal(scale=(2.0/total_size), size=(1, 1))
         self.w = ag.Tensor(w, requires_grad=True)
         self.b = ag.Tensor(b, requires_grad=True)
         self.params = [self.w, self.b]
@@ -159,7 +157,7 @@ class SimpleSelfAttention(Module):
         value.set_name("value")
 
         score = ag.batch_matmul(query, key)  # (n,n)
-        w = score / np.sqrt(k)               # (n,n)
+        w = score / xp.sqrt(k)               # (n,n)
         w = ag.softmax(w)                    # (n,n)
         w.set_name("w")
 
@@ -169,17 +167,17 @@ class SimpleSelfAttention(Module):
 # Creates a mask which masks out the future token positions
 # (seq_len, seq_len) returns a top-right diagonal matrix of 1's
 def create_mask_of_future_positions(seq_len):
-    mask = np.ones((seq_len, seq_len))
-    mask = np.tril(mask) == 0
+    mask = xp.ones((seq_len, seq_len))
+    mask = xp.tril(mask) == 0
     return mask
-    # mask = np.ones((seq_len, seq_len))
-    # mask = np.triu(mask) > 0
+    # mask = xp.ones((seq_len, seq_len))
+    # mask = xp.triu(mask) > 0
     # return mask
 
 def extend_mask(in_mask, seq_len):
     # b,n,..., seq_len
-    mask = np.reshape(in_mask, (-1, 1, seq_len))
-    mask = np.broadcast_to(mask, in_mask.shape + (seq_len,))
+    mask = xp.reshape(in_mask, (-1, 1, seq_len))
+    mask = xp.broadcast_to(mask, in_mask.shape + (seq_len,))
     return mask
 
 # single pass of attention 
@@ -190,9 +188,9 @@ def extend_mask(in_mask, seq_len):
 def attention(query, key, value, mask=None):
     querykey_size = query.shape[-1]
     y = ag.batch_matmul(query, key)         # (*, seq_len, seq_len)
-    y = y / np.sqrt(querykey_size)          # (*, seq_len, seq_len)
+    y = y / xp.sqrt(querykey_size)          # (*, seq_len, seq_len)
     if mask is not None:
-        y = ag.mask_fill(y, mask, -np.inf)  # (*, seq_len, seq_len)
+        y = ag.mask_fill(y, mask, -xp.inf)  # (*, seq_len, seq_len)
     y = ag.softmax(y, axis=(-2,-1))         # (*, seq_len, seq_len)
     y = ag.batch_matmul(y, value)           # (*, seq_len, dim_value)
     return y
@@ -261,7 +259,7 @@ class MultiHeadSelfAttention(Module):
             x_mask = extend_mask(x_mask, n)                     # (b,n,n)
             assert x_mask.shape == (b,n,n)
             mask = mask.value() | x_mask                        # (b,n,n)
-            mask = np.reshape(mask, (b,1,n,n))                  # (b,h,n,n)
+            mask = xp.reshape(mask, (b,1,n,n))                  # (b,h,n,n)
             mask = ag.Tensor(mask)
 
         z = attention(

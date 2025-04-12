@@ -1,5 +1,5 @@
 
-import numpy as np
+from devices import xp
 import utils
 
 def conv_single_step(a_slice_prev, W, b):
@@ -18,9 +18,9 @@ def conv_single_step(a_slice_prev, W, b):
 
     ### START CODE HERE ### (≈ 2 lines of code)
     # Element-wise product between a_slice and W. Do not add the bias yet.
-    s = np.multiply(a_slice_prev, W)
+    s = xp.multiply(a_slice_prev, W)
     # Sum over all entries of the volume s.
-    Z = np.sum(s)
+    Z = xp.sum(s)
     # Add bias b to Z. Cast b to a float() so that Z results in a scalar value.
     Z = Z + float(b)
     ### END CODE HERE ###
@@ -58,7 +58,7 @@ def conv_forward(A_prev, W, b, hparameters):
     n_W = int((n_W_prev - f + 2 * pad) / stride + 1)
     
     # Initialize the output volume Z with zeros. (≈1 line)
-    Z = np.zeros((m, n_C, n_H, n_W))
+    Z = xp.zeros((m, n_C, n_H, n_W))
     
     # Create A_prev_pad by padding A_prev
     A_prev_pad = utils.zero_pad2(A_prev, pad)
@@ -127,9 +127,9 @@ def conv_backward(dZ, cache):
     (m, n_C, n_H, n_W) = dZ.shape
     
     # Initialize dA_prev, dW, db with the correct shapes
-    dA_prev = np.zeros((m, n_C_prev, n_H_prev, n_W_prev))                           
-    dW = np.zeros((n_C, n_C_prev, f, f))
-    db = np.zeros((n_C, 1, 1, 1))
+    dA_prev = xp.zeros((m, n_C_prev, n_H_prev, n_W_prev))                           
+    dW = xp.zeros((n_C, n_C_prev, f, f))
+    db = xp.zeros((n_C, 1, 1, 1))
 
     # Pad A_prev and dA_prev
     A_prev_pad = utils.zero_pad2(A_prev, pad)

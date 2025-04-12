@@ -1,23 +1,23 @@
-import numpy as np
+from devices import xp
 
 def sigmoid(X):
-    return 1 / (1 + np.exp(-X))
+    return 1 / (1 + xp.exp(-X))
 
 def sigmoid_derivative(X):
     return sigmoid(X) * (1 - sigmoid(X))
 
 def relu(x):
-    return (x + np.abs(x)) * 0.5
+    return (x + xp.abs(x)) * 0.5
 
 def relu_derivative(x):
-    return np.zeros(x.shape) + (x > 0)
+    return xp.zeros(x.shape) + (x > 0)
 
 def softmax_internal(X):
     """Compute the softmax of vector x in a numerically stable way."""
-    shiftx = X - np.max(X)
-    exps = np.exp(shiftx)
-    return exps / np.sum(exps)
-    # return np.exp(X) / np.sum(np.exp(X))
+    shiftx = X - xp.max(X)
+    exps = xp.exp(shiftx)
+    return exps / xp.sum(exps)
+    # return xp.exp(X) / xp.sum(xp.exp(X))
 
 def softmax_derivative_vectorized(z):
     """Computes the gradient of the softmax function.
@@ -32,7 +32,7 @@ def softmax_derivative_vectorized(z):
     # -SjSi can be computed using an outer product between Sz and itself. Then
     # we add back Si for the i=j cases by adding a diagonal matrix with the
     # values of Si on its diagonal.
-    D = -np.outer(Sz, Sz) + np.diag(Sz.flatten())
+    D = -xp.outer(Sz, Sz) + xp.diag(Sz.flatten())
     return D
 
 def softmax_derivative_iterative(X):
@@ -44,7 +44,7 @@ def softmax_derivative_iterative(X):
     is DjSi - the partial derivative of Si w.r.t. input j.
     """
     S = softmax_internal(X)
-    grads = np.zeros((len(X), len(X)))
+    grads = xp.zeros((len(X), len(X)))
     for i in range(len(X)):
         for j in range(len(X)):
             if i == j:
@@ -55,10 +55,10 @@ def softmax_derivative_iterative(X):
 
 
 def softmax(X):
-    return np.array([softmax_internal(x) for x in X])
+    return xp.array([softmax_internal(x) for x in X])
 
 def softmax_derivative(X):
-    return np.array([softmax_derivative_iterative(x) for x in X])
+    return xp.array([softmax_derivative_iterative(x) for x in X])
     # return softmax_derivative_vectorized(X)
 
 def cross_entropy_loss(y_true, y_pred):
@@ -69,12 +69,12 @@ def cross_entropy_loss(y_true, y_pred):
         for i in range(len(y_true[b])):
             if y_pred[b,i] <= 0.0:
                 continue
-            loss -= y_true[b,i] * np.log(y_pred[b,i])
+            loss -= y_true[b,i] * xp.log(y_pred[b,i])
     loss /= num_batches
     return loss
 
 def cross_entropy_loss_derivative(y_true, y_pred):
-    output = np.zeros(y_pred.shape, dtype=np.float64)
+    output = xp.zeros(y_pred.shape, dtype=xp.float64)
     num_batches = y_true.shape[0]
     for b in range(num_batches):
         for i in range(len(y_true[b])):
@@ -84,9 +84,9 @@ def cross_entropy_loss_derivative(y_true, y_pred):
     return output
 
 def mean_square_error(y_true, y_pred):
-    # return np.mean(7np.power(y_true - y_pred, 2))
-    err = np.mean(np.power(y_true - y_pred, 2))
+    # return xp.mean(7xp.power(y_true - y_pred, 2))
+    err = xp.mean(xp.power(y_true - y_pred, 2))
     return err
 
 def mean_square_error_derivative(y_true, y_pred):
-    return 2 * (y_pred - y_true) / np.size(y_true)
+    return 2 * (y_pred - y_true) / xp.size(y_true)

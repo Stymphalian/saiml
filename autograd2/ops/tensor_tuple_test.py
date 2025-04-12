@@ -1,7 +1,8 @@
 import unittest
-import numpy as np
+# import numpy as np
 import autograd2 as ag
 import base_gradient_test
+from devices import xp
 
 class TensorTupleTest(base_gradient_test.NumericalGradientTest):
 
@@ -38,7 +39,7 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
         self.assertEqual(want_x4, got_x4)
 
     def test_make_tuple(self):
-        np.random.seed(1)
+        xp.random.seed(1)
         x1 = ag.Tensor(1, requires_grad=True)
         x2 = ag.Tensor(2, requires_grad=True)
         x3 = ag.Tensor(3, requires_grad=True)
@@ -53,7 +54,7 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
         self.assertEqual(x4.grad.value(), 1)
 
     # def test_tensor_tuple_add(self):
-    #     np.random.seed(1)
+    #     xp.random.seed(1)
     #     x1 = ag.Parameter(1, requires_grad=True)
     #     x2 = ag.Parameter(2, requires_grad=True)
     #     x3 = ag.Parameter(3, requires_grad=True)
@@ -72,7 +73,7 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
     #     self.assertEqual(x4.grad.value(), 1)
     
     def test_tensor_tuple_sum(self):
-        np.random.seed(1)
+        xp.random.seed(1)
         x1 = ag.Parameter(1, requires_grad=True)
         x2 = ag.Parameter(2, requires_grad=True)
         x3 = ag.Parameter(3, requires_grad=True)
@@ -88,7 +89,7 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
 
 
     def test_tuple_get_item(self):
-        np.random.seed(1)
+        xp.random.seed(1)
         x1 = ag.Parameter(1, requires_grad=True)
         x2 = ag.Parameter(2, requires_grad=True)
 
@@ -105,9 +106,9 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
         self.assertEqual(z3.value(), 2)
 
     def test_tuple_get_slice(self):
-        np.random.seed(1)
+        xp.random.seed(1)
         x1 = ag.Parameter(1)
-        x2 = ag.Parameter(np.array([2,2]))
+        x2 = ag.Parameter(xp.array([2,2]))
         x3 = ag.Parameter(3)
         x4 = ag.Parameter(4)
         z1 = x1*x2
@@ -118,21 +119,21 @@ class TensorTupleTest(base_gradient_test.NumericalGradientTest):
 
         y1 = z2[0]
         y2 = z2[1]
-        self.assertTrue(np.array_equal(y1.value(), np.array([2,2])))
+        self.assertTrue(xp.array_equal(y1.value(), xp.array([2,2])))
         self.assertEquals(y2.value(), 3)
 
         z2 = z1[0:2]
         y1 = z2[0]
         y2 = z2[1]
-        self.assertTrue(np.array_equal(y1.value(), np.array([2,2])))
+        self.assertTrue(xp.array_equal(y1.value(), xp.array([2,2])))
         self.assertEquals(y2.value(), 3)
 
     def test_tuple_backward(self):
-        np.random.seed(1)
-        x1 = ag.Tensor(np.random.rand(2,3), requires_grad=True)
-        x2 = ag.Tensor(np.random.rand(2,3), requires_grad=True)
-        x3 = ag.Tensor(np.random.rand(2,3), requires_grad=True)
-        x4 = ag.Tensor(np.random.rand(2,3), requires_grad=True)
+        xp.random.seed(1)
+        x1 = ag.Tensor(xp.random.rand(2,3), requires_grad=True)
+        x2 = ag.Tensor(xp.random.rand(2,3), requires_grad=True)
+        x3 = ag.Tensor(xp.random.rand(2,3), requires_grad=True)
+        x4 = ag.Tensor(xp.random.rand(2,3), requires_grad=True)
 
         def do():
             z1 = ag.make_tuple(x1, x2)

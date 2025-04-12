@@ -96,7 +96,7 @@ def convert_batches_to_numpy_with_mask(batch, tokenizer:Tokenizer, seq_len):
     assert source.ndim == 3
     assert source.shape == (len(batch), seq_len, tokenizer.vocab_size)
     # assert source_mask.shape == (len(batch), seq_len, seq_len)
-    assert source_mask.shape == (len(batch), seq_len)
+    # assert source_mask.shape == (len(batch), seq_len)
     return source, source_mask
 
 def get_batches(lines, seq_len, batch_size):

@@ -13,7 +13,7 @@ def _convolve2d_iterative(x, kernel, stride=1, padding=0, dilate=0):
     x = utils.zero_dilate(x, dilate, axes=spatial_axes)
     x = utils.zero_pad(x, padding, axes=spatial_axes)
     kc, kh, kw = kernel.shape
-    output = np.zeros((1, new_height, new_width), dtype=x.dtype)
+    output = xp.zeros((1, new_height, new_width), dtype=x.dtype)
     xc, xh, xw = x.shape
 
     for row in range(new_height):
@@ -25,7 +25,7 @@ def _convolve2d_iterative(x, kernel, stride=1, padding=0, dilate=0):
                 continue
             x_slice = x[:, h:h+kh, w:w+kw]
             assert x_slice.shape == kernel.shape
-            v = np.sum(x_slice * kernel)
+            v = xp.sum(x_slice * kernel)
             output[0,row,col] += v
     return output
 
@@ -42,8 +42,8 @@ def _convolve2d_gradient_iterative(x, kernel, outGrad, stride=1, padding=0, dila
     kc, kh, kw = kernel.shape
     xc, xh, xw = x.shape
     
-    dx = np.zeros(x.shape)
-    dk = np.zeros(kernel.shape)
+    dx = xp.zeros(x.shape)
+    dk = xp.zeros(kernel.shape)
 
     for row in range(new_height):
         for col in range(new_width):
@@ -55,8 +55,8 @@ def _convolve2d_gradient_iterative(x, kernel, outGrad, stride=1, padding=0, dila
             if h + kh > xh or w + kw > xw:
                 raise Exception("Kernel is out of bounds")
                 continue
-            dx[:, h:h+kh, w:w+kw] += np.multiply(kernel, dY)
-            dk += np.multiply(x_slice, dY)
+            dx[:, h:h+kh, w:w+kw] += xp.multiply(kernel, dY)
+            dk += xp.multiply(x_slice, dY)
         
     if padding > 0:
         dx = dx[:, padding:-padding, padding:-padding]
@@ -94,7 +94,7 @@ def _convolve2d_transpose_iterative(y, kernel, stride=1, padding=0, outer_paddin
     new_height = yh + (kh - 1)*stride_row
     new_width = yw + (kw - 1)*stride_col
 
-    x = np.zeros((kc, new_height, new_width), dtype=y.dtype)
+    x = xp.zeros((kc, new_height, new_width), dtype=y.dtype)
 
     for k in range(kc):
         for row in range(kh):
@@ -107,8 +107,8 @@ def _convolve2d_transpose_iterative(y, kernel, stride=1, padding=0, outer_paddin
         pad = outer_padding
         x = x[:, pad:-pad, pad:-pad]
 
-    x = np.sum(x, axis=0)
-    x = x[np.newaxis, :,:]
+    x = xp.sum(x, axis=0)
+    x = x[xp.newaxis, :,:]
     return x
 
 def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, padding=0, outer_padding=0):
@@ -132,8 +132,8 @@ def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, paddi
         outGrad = utils.zero_pad(outGrad, outer_padding, axes=spatial_axes)
     assert outGrad.shape == (1, new_height, new_width), "{} != {}".format(outGrad.shape, (kc, new_height, new_width))
     
-    dy = np.zeros(y.shape)
-    dk = np.zeros(kernel.shape)
+    dy = xp.zeros(y.shape)
+    dk = xp.zeros(kernel.shape)
 
     for k in range(kc):
         for row in range(kh):
@@ -143,14 +143,14 @@ def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, paddi
                 out_slice = outGrad[0, h:h+yh, w:w+yw]
                 assert (out_slice.shape == y.shape[1:])
                 dy += kernel[k,row,col] * out_slice
-                dk[k,row,col] += np.sum(y * out_slice)
+                dk[k,row,col] += xp.sum(y * out_slice)
 
                 # h = row * stride_row
                 # w = col * stride_col
                 # out_slice = outGrad[:, h:h+yh, w:w+yw]
                 # assert (out_slice.shape[1:] == y.shape)
-                # dy += np.sum(kernel[:,row,col] * out_slice, axis=0)
-                # dk[:,row, col] += np.sum(y * out_slice)
+                # dy += xp.sum(kernel[:,row,col] * out_slice, axis=0)
+                # dk[:,row, col] += xp.sum(y * out_slice)
 
     return (dy, dk)
 
@@ -162,7 +162,7 @@ def _max_pool2d_iterative(x, kernel_size, stride=1, padding=0):
     new_width = (xw - kw + 2*padding) // stride + 1
 
     xpad = utils.zero_pad(x, padding, axes=(1,2))
-    y = np.zeros((1, new_height, new_width), dtype=x.dtype)
+    y = xp.zeros((1, new_height, new_width), dtype=x.dtype)
 
     for c in range(xc):
         for row in range(new_height):
@@ -170,7 +170,7 @@ def _max_pool2d_iterative(x, kernel_size, stride=1, padding=0):
                 h = row * stride
                 w = col * stride
                 x_slice = xpad[c, h:h+kh, w:w+kw]
-                y[0, row, col] = np.max(x_slice)
+                y[0, row, col] = xp.max(x_slice)
     return y
 
 def _max_pool2d_gradient_iterative(x, kernel_size, outGrad, stride=1, padding=0):
@@ -185,7 +185,7 @@ def _max_pool2d_gradient_iterative(x, kernel_size, outGrad, stride=1, padding=0)
     assert outGrad.shape == (1, new_height, new_width)
 
     xpad = utils.zero_pad(x, padding, axes=(1,2))
-    dx = np.zeros(xpad.shape)
+    dx = xp.zeros(xpad.shape)
 
     for c in range(xc):
         for row in range(new_height):
@@ -195,7 +195,7 @@ def _max_pool2d_gradient_iterative(x, kernel_size, outGrad, stride=1, padding=0)
                 
                 dY = outGrad[0, row, col]
                 x_slice = xpad[c, h:h+kh, w:w+kw]
-                max_coords = np.unravel_index(np.argmax(x_slice), x_slice.shape)
+                max_coords = xp.unravel_index(xp.argmax(x_slice), x_slice.shape)
                 dx[c, h+max_coords[0], w+max_coords[1]] += dY
         
     if padding > 0:
@@ -204,10 +204,10 @@ def _max_pool2d_gradient_iterative(x, kernel_size, outGrad, stride=1, padding=0)
 
     # rows, cols = get_convolution_positions(x.shape, (kc, kh, kw), stride, padding)
     # xpad = utils.zero_pad(x, padding, axes=(1,2))
-    # dx = np.zeros(xpad.shape)
+    # dx = xp.zeros(xpad.shape)
     # x1 = x[:, rows, cols]
-    # xmax = np.argmax(x1, axis=2, keepdims=False).flatten()
-    # len_y = np.arange(new_height*new_width)
+    # xmax = xp.argmax(x1, axis=2, keepdims=False).flatten()
+    # len_y = xp.arange(new_height*new_width)
     # row_indices = rows[len_y, xmax]
     # col_indices = cols[len_y, xmax]
     # dx[:, row_indices, col_indices] = outGrad

@@ -1,9 +1,10 @@
-import numpy as np
+import numpy 
 from typing import *
 from ..base import Operator, Tensor, TensorTuple
+from devices import xp, xp_ndarray
 
 
-def get_broadcast_shape(outGrad, x, axis):
+def get_broadcast_shape(x, axis):
     """
     Given the axis in which an operation was applied to x. 
     Get the new output_shape with (1,) put into the axis
@@ -12,9 +13,9 @@ def get_broadcast_shape(outGrad, x, axis):
         outGradShape = (1,)*x.ndim
         outGradSize = x.size
     else:
-        outGradShape = np.array(x.shape)                
+        outGradShape = numpy.array(x.shape)                
         axes = list(axis) if isinstance(axis, (list, tuple)) else [axis]
-        outGradSize = np.prod(outGradShape[axes])
+        outGradSize = numpy.prod(outGradShape[axes])
         outGradShape[axes] = 1
     return tuple(outGradShape), outGradSize
 
@@ -55,7 +56,7 @@ class TensorAdd(Operator):
         assert len(inputs) == 2
         a = inputs[0].value()
         b = inputs[1].value()
-        y = np.add(a, b)
+        y = xp.add(a, b)
         assert y.shape == a.shape or y.shape == b.shape
         return y
 
@@ -86,7 +87,7 @@ class TensorAddScalar(Operator):
     
 class TensorSub(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.subtract(inputs[0].value(), inputs[1].value())
+        return xp.subtract(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
         a = node.inputs[0]
         b = node.inputs[1]
@@ -113,7 +114,7 @@ class TensorSubScalar(Operator):
         
 class TensorMult(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.multiply(inputs[0].value(), inputs[1].value())
+        return xp.multiply(inputs[0].value(), inputs[1].value())
     def gradients(self, node, outGrad):
         a = node.inputs[0]
         b = node.inputs[1]
@@ -143,7 +144,7 @@ class TensorMultScalar(Operator):
     
 class TensorDiv(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.divide(inputs[0].value(), inputs[1].value())
+        return xp.divide(inputs[0].value(), inputs[1].value())
 
     def gradients(self, node, outGrad):
         a = node.inputs[0]
@@ -174,7 +175,7 @@ class TensorDivScalar(Operator):
 
 class TensorSin(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.sin(inputs[0].value())
+        return xp.sin(inputs[0].value())
     def gradients(self, node, outGrad):
         dz = outGrad * cos(node.inputs[0])
         assert dz.shape == node.inputs[0].shape
@@ -182,7 +183,7 @@ class TensorSin(Operator):
     
 class TensorCos(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.cos(inputs[0].value())
+        return xp.cos(inputs[0].value())
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         dz = outGrad * -sin(x)
@@ -191,7 +192,7 @@ class TensorCos(Operator):
     
 class TensorTan(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.tan(inputs[0].value())
+        return xp.tan(inputs[0].value())
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         dz = mult(outGrad, Tensor(1.0) / power(cos(x), 2))
@@ -200,7 +201,7 @@ class TensorTan(Operator):
     
 class TensorLog(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.log(inputs[0].value())
+        return xp.log(inputs[0].value())
     def gradients(self, node, outGrad):
         dz = mult(outGrad, 1.0 / node.inputs[0])
         assert dz.shape == node.inputs[0].shape
@@ -210,7 +211,7 @@ class TensorMatMul(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         X = inputs[0].value()
         W = inputs[1].value()
-        return np.matmul(X, W)
+        return xp.matmul(X, W)
     def gradients(self, node, outGrad):
         X = node.inputs[0]
         W = node.inputs[1]
@@ -260,7 +261,7 @@ class TensorEinsteinSum(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         # assert(len(inputs) == 2)
         x = [a.value() for a in inputs]
-        y = np.einsum(self.equation, *x)
+        y = xp.einsum(self.equation, *x)
         return y
 
     def gradients(self, node, outGrad):
@@ -286,7 +287,7 @@ class TensorEinsteinSum(Operator):
                 # backward we need to expand out that missing dimension
                 missing_eq = "".join([symbol for _, symbol in missing])
                 missing_shapes = [current_op.shape[index] for index, _ in missing]
-                missing_ops = Tensor(np.ones(missing_shapes))
+                missing_ops = Tensor(xp.ones(missing_shapes))
 
                 new_rest_eq = ",".join([missing_eq] + rest_eq)
                 new_rest_ops = (missing_ops,) + rest_ops
@@ -306,7 +307,7 @@ class TensorSum(Operator):
 
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        y = np.sum(x, axis=self.axis, keepdims=self.keepdims)
+        y = xp.sum(x, axis=self.axis, keepdims=self.keepdims)
         # if self.keepdims:
         #     if self.axis is None:
         #         x_shape= (1,)*x.ndim    
@@ -322,7 +323,7 @@ class TensorSum(Operator):
         assert outGrad.ndim <= x.ndim
         # if outGrad.ndim < x.ndim:
         if outGrad.shape != x.shape:
-            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            outGradShape, _ = get_broadcast_shape(x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
         dz = broadcast(outGrad, x.shape)
         assert dz.shape == x.shape
@@ -330,7 +331,7 @@ class TensorSum(Operator):
     
 class TensorExp(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.exp(inputs[0].value())
+        return xp.exp(inputs[0].value())
     def gradients(self, node, outGrad):
         x = exp(node.inputs[0])
         dx = mult(outGrad, x)
@@ -342,7 +343,7 @@ class TensorMean(Operator):
         self.axis = axis
         self.keepdims = keepdims
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.mean(
+        return xp.mean(
             inputs[0].value(), 
             axis=self.axis,
             keepdims=self.keepdims
@@ -354,7 +355,7 @@ class TensorMean(Operator):
         x = node.inputs[0]
         outGradSize = x.size
         if outGrad.shape != x.shape:
-            outGradShape, outGradSize = get_broadcast_shape(outGrad, x, self.axis)
+            outGradShape, outGradSize = get_broadcast_shape(x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
         dx = broadcast(outGrad, x.shape) / outGradSize
 
@@ -367,9 +368,9 @@ class TensorPower(Operator):
         self.power = power
     def compute(self, *inputs: Tuple[Tensor]):
         if self.power < 0:
-            return 1.0 / np.power(inputs[0].value(), abs(self.power))
+            return 1.0 / xp.power(inputs[0].value(), abs(self.power))
         else:
-            return np.power(inputs[0].value(), self.power)
+            return xp.power(inputs[0].value(), self.power)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         dx = power(x, self.power - 1) * self.power
@@ -378,7 +379,7 @@ class TensorPower(Operator):
         return dx
     
 
-# TODO: argmax_axes should return in the same format as np.argmax
+# TODO: argmax_axes should return in the same format as xp.argmax
 # The reshaping into the dx format should happen outside of this method
 def argmax_axes(x, axes, keepdims=True):
     # Handle axes with negative indexing
@@ -388,11 +389,11 @@ def argmax_axes(x, axes, keepdims=True):
     rest_axes = tuple(sorted(set(all_axes) - set(axes)))
     axes_shape = tuple([x.shape[axis] for axis in axes])
     rest_axes_shape = tuple([x.shape[axis] for axis in rest_axes])
-    rest_axes_size = np.prod(rest_axes_shape)
+    rest_axes_size = numpy.prod(rest_axes_shape)
      
-    dx = np.zeros(x.shape)
+    dx = xp.zeros(x.shape)
     for i in range(rest_axes_size):
-        rest_axes_coords = np.unravel_index(i, rest_axes_shape)
+        rest_axes_coords = xp.unravel_index(xp.array(i), rest_axes_shape)
         assert len(rest_axes_coords) == len(rest_axes)
 
         indexing = [slice(None)]*x.ndim
@@ -400,8 +401,8 @@ def argmax_axes(x, axes, keepdims=True):
             indexing[axis] = coord
 
         # Assign a 1 into the place into the place where the max is found
-        maxindex = np.argmax(x[tuple(indexing)])
-        coords = np.unravel_index(maxindex, axes_shape)
+        maxindex = xp.argmax(x[tuple(indexing)])
+        coords = xp.unravel_index(maxindex, axes_shape)
         assert len(coords) == len(axes)
         for axis, coord in zip(axes, coords):
             indexing[axis] = coord
@@ -410,7 +411,7 @@ def argmax_axes(x, axes, keepdims=True):
     if not keepdims:
         # TODO: This doesn't work
         raise NotImplementedError()
-        dx = np.squeeze(dx, axis=rest_axes)
+        dx = xp.squeeze(dx, axis=rest_axes)
     return dx
         
 class TensorMax(Operator):
@@ -418,22 +419,26 @@ class TensorMax(Operator):
         self.axis = axis
         self.keepdims = keepdims
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.max(inputs[0].value(), axis=self.axis, keepdims=self.keepdims)
+        return xp.max(inputs[0].value(), axis=self.axis, keepdims=self.keepdims)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         if self.axis is None:
-            xi = np.argmax(x.value())
-            dx = np.zeros(x.shape)
-            np.put(dx, xi, 1)
+            xi = xp.argmax(x.value())
+            dx = xp.zeros(x.shape)
+            xp.put(dx, xi, 1)
         elif isinstance(self.axis, int):
-            xi = np.argmax(x.value(), axis=self.axis, keepdims=True)
-            dx = np.zeros(x.shape)
-            np.put_along_axis(dx, xi, 1, axis=self.axis)
-            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            # xi = xp.argmax(x.value(), axis=self.axis, keepdims=True)
+            # dx = xp.zeros(x.shape)
+            # xp.put_along_axis(dx, xi, 1, axis=self.axis)
+            # outGradShape, _ = get_broadcast_shape(x, self.axis)
+            # outGrad = outGrad.reshape(outGradShape)
+            axis = (self.axis,)
+            dx = argmax_axes(x.value(), axis)
+            outGradShape, _ = get_broadcast_shape(x, axis)
             outGrad = outGrad.reshape(outGradShape)
         else:
             dx = argmax_axes(x.value(), self.axis)
-            outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+            outGradShape, _ = get_broadcast_shape(x, self.axis)
             outGrad = outGrad.reshape(outGradShape)
 
         dx = outGrad * Tensor(dx)
@@ -451,10 +456,10 @@ class TensorNorm(Operator):
     def __init__(self, axis=None):
         self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.linalg.norm(inputs[0].value(), axis=self.axis)
+        return xp.linalg.norm(inputs[0].value(), axis=self.axis)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
-        outGradShape, _ = get_broadcast_shape(outGrad, x, self.axis)
+        outGradShape, _ = get_broadcast_shape(x, self.axis)
         outGrad = outGrad.reshape(outGradShape)
         dx = outGrad * x / norm(x, axis=self.axis)
         assert dx.shape == x.shape
@@ -462,7 +467,7 @@ class TensorNorm(Operator):
     
 class TensorSqrt(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
-        return np.sqrt(inputs[0].value())
+        return xp.sqrt(inputs[0].value())
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         dx = outGrad / (2 * sqrt(x))
@@ -475,7 +480,7 @@ class TensorWhere(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         a = inputs[0].value()
         b = inputs[1].value()
-        z = np.where(self.mask, a, b)
+        z = xp.where(self.mask, a, b)
         return z
     def gradients(self, node, outGrad):
         assert outGrad.shape == node.inputs[0].shape
@@ -484,7 +489,7 @@ class TensorWhere(Operator):
 
         assert a.shape == b.shape
         assert a.shape == outGrad.shape
-        outgrad_zero = Tensor(np.zeros(a.shape))
+        outgrad_zero = Tensor(xp.zeros(a.shape))
         da = where(self.mask, outGrad, outgrad_zero)
         db = where(self.mask, outgrad_zero, outGrad)
         return da, db
@@ -508,7 +513,7 @@ class TensorBitwiseOr(Operator):
 #################################################
 
 class TensorTupleMake(Operator):
-    def compute(self, *inputs: Tuple[Tensor]) -> Union[np.ndarray, Tuple[np.ndarray]]:
+    def compute(self, *inputs: Tuple[Tensor]) -> Union[xp_ndarray, Tuple[xp_ndarray]]:
         assert len(inputs) > 0
         assert isinstance(inputs[0], Tensor)
         return tuple(inputs)
@@ -544,7 +549,7 @@ class TensorTupleGetItem(Operator):
             if i == self.index:
                 dx.append(outGrad)
             else:
-                zero = Tensor(np.zeros(x[i].shape))
+                zero = Tensor(xp.zeros(x[i].shape))
                 dx.append(zero)
         assert len(dx) == len(x)
         return make_tuple(*dx)
@@ -571,7 +576,7 @@ class TensorTupleGetSlice(Operator):
         
         dx = []
         for i in range(len(x)):
-            zero = Tensor(np.zeros(x[i].shape))
+            zero = Tensor(xp.zeros(x[i].shape))
             dx.append(zero)
         for i, d in enumerate(outGrad[self.slice]):
             dx[i] = d
@@ -654,7 +659,7 @@ class TensorBroadcast(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
         # assert x.ndim == len(self.shape)
-        return np.broadcast_to(x, self.shape)
+        return xp.broadcast_to(x, self.shape)
 
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
@@ -684,12 +689,12 @@ class TensorTranspose(Operator):
         self.axis = axis
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        return np.transpose(x, self.axis)
+        return xp.transpose(x, self.axis)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
 
         axes = make_axes_positive(self.axis, x.ndim)
-        reverse_axes = np.argsort(axes)
+        reverse_axes = numpy.argsort(axes)
         dx = transpose(outGrad, reverse_axes)
         assert dx.shape == x.shape
         return dx
@@ -702,7 +707,7 @@ class TensorRepeat(Operator):
 
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        return np.repeat(x, self.repeats, axis=self.axis)
+        return xp.repeat(x, self.repeats, axis=self.axis)
     
     def gradients(self, node, outGrad):
         x = node.inputs[0]
@@ -734,7 +739,7 @@ class TensorTile(Operator):
 
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
-        return np.tile(x, self.repeats)
+        return xp.tile(x, self.repeats)
 
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
@@ -770,7 +775,7 @@ class TensorStack(Operator):
             assert x.shape == ref_shape
 
         flat = [x.value() for x in inputs[0]]
-        y = np.stack(flat, axis=self.axis)
+        y = xp.stack(flat, axis=self.axis)
         return y
 
     def gradients(self, node, outGrad: Tensor):
@@ -788,7 +793,11 @@ class TensorUnstack(Operator):
 
     def compute(self, *inputs: Tuple[Tensor]):
         assert isinstance(inputs[0], Tensor)
-        y = np.unstack(inputs[0].value(), axis=self.axis)
+
+        num_splits = inputs[0].shape[self.axis]
+        y = xp.split(inputs[0].value(), num_splits, axis=self.axis)
+        y = [xp.squeeze(a, axis=self.axis) for a in y]
+
         return tuple(Tensor(a) for a in y)
 
     def gradients(self, node, outGrad):
@@ -799,9 +808,9 @@ class TensorConcatenate(Operator):
     def __init__(self, axis=None):
         self.axis = axis
 
-    def compute(self, *inputs: Tuple[TensorTuple]) -> np.ndarray:
+    def compute(self, *inputs: Tuple[TensorTuple]) -> xp_ndarray:
         a = [x.value() for x in inputs[0]]
-        y = np.concatenate(a, axis=self.axis)
+        y = xp.concatenate(a, axis=self.axis)
         return y
 
     def gradients(self, node, outGrad:Tensor) -> TensorTuple:
@@ -825,7 +834,7 @@ class TensorSplit(Operator):
 
     def compute(self, *inputs: Tuple[Tensor]) -> Tuple[Tensor]:
         x = inputs[0].value()
-        y = np.split(x, self.num_splits, axis=self.axis)
+        y = xp.split(x, self.num_splits, axis=self.axis)
         assert len(y) == self.num_splits
         return tuple([Tensor(a) for a in y])
 

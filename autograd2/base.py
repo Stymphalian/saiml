@@ -1,8 +1,12 @@
-import numpy as np
 import graphviz
 from typing import *
 from collections import defaultdict
 import autograd2 as ag
+import devices
+import numpy
+
+xp = devices.xp
+xp_ndarray = devices.xp_ndarray
 
 class Node:
     _NODE_AUTO_ID = 1
@@ -54,20 +58,21 @@ class Tensor(Node):
             data, 
             operator: Optional[Operator]=None,
             requires_grad=False,
-            dtype=np.float64, 
+            dtype=xp.float64, 
             name="",
-            inputs: Tuple["Tensor"]=()):
+            inputs: Tuple["Tensor"]=(),
+            device:devices.Device=devices.default_device(),
+            ):
         super().__init__()
 
-        if not isinstance(data, np.ndarray):
-            self._data = np.array(data, dtype=dtype)
-        else:
-            assert isinstance(data, np.ndarray)
+        if isinstance(data, (Tensor, TensorTuple)):
+            raise Exception("Should not be Tensor/TensorTuple")
+        elif isinstance(data, xp_ndarray):
             self._data = data
-        # if isinstance(data, (Tensor, TensorTuple, np.ndarray)):
-        #     self._data = data
-        # else:
-        #     self._data = np.array(data, dtype=dtype)
+        else:
+            # self._data = device.from_numpy(data, dtype=dtype)
+            self._data = xp.array(data, dtype=dtype)
+            
 
         self._grad = None
         self.dtype = dtype
@@ -81,6 +86,11 @@ class Tensor(Node):
             if self.operator is not None:
                 self._data = self.operator.compute(*self.inputs)
         return self._data
+    
+    def numpy(self):
+        if xp is numpy:
+            return self.value()
+        return xp.asnumpy(self.value())
 
     @property
     def grad(self):
@@ -211,7 +221,7 @@ class TensorTuple(Node):
             data,
             operator: Optional[Operator]=None,
             requires_grad=False,
-            dtype=np.float64, 
+            dtype=xp.float64, 
             inputs: Tuple["Tensor"]=()):
         super().__init__()
 
@@ -277,15 +287,15 @@ class TensorTuple(Node):
     def __str__(self):
         return "TensorTuple(" + self.value().__str__() + ")"
     
-def ones(shape, dtype=np.float64, requires_grad=False):
-    return Tensor(np.ones(shape), dtype=dtype, requires_grad=requires_grad)
-def zeros(shape, dtype=np.float64, requires_grad=False):
-    return Tensor(np.zeros(shape), dtype=dtype, requires_grad=requires_grad)
-def random(shape, dtype=np.float64, requires_grad=False):
-    return Tensor(np.random.rand(*shape), dtype=dtype, requires_grad=requires_grad)
-def arange(shape, dtype=np.float64, requires_grad=False):
-    size = np.prod(shape)
-    return Tensor(np.arange(size).reshape(shape), dtype=dtype, requires_grad=requires_grad)
+def ones(shape, dtype=xp.float64, requires_grad=False):
+    return Tensor(xp.ones(shape), dtype=dtype, requires_grad=requires_grad)
+def zeros(shape, dtype=xp.float64, requires_grad=False):
+    return Tensor(xp.zeros(shape), dtype=dtype, requires_grad=requires_grad)
+def random(shape, dtype=xp.float64, requires_grad=False):
+    return Tensor(xp.random.rand(*shape), dtype=dtype, requires_grad=requires_grad)
+def arange(shape, dtype=xp.float64, requires_grad=False):
+    size = numpy.prod(shape)
+    return Tensor(xp.arange(size).reshape(shape), dtype=dtype, requires_grad=requires_grad)
 
 def grad(node: Union[Tensor, TensorTuple], outGrad=None):
     node_to_grads = defaultdict(list)
@@ -353,7 +363,7 @@ def generate_graphviz(node: Tensor):
             attrs["shape"] = "doublecircle"
 
         if isinstance(v, Tensor):
-            tooltip_value = str(np.round(v.value(),2))
+            tooltip_value = str(numpy.round(v.value(),2))
         else:
             tooltip_value = str(v.value())
         attrs["tooltip"] = tooltip_value

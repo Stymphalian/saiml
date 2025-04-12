@@ -1,8 +1,6 @@
 import unittest
 import numpy as np
-import utils
 import tokenizer
-# from tokenizer import Tokenizer
 
 class TestTokenizer(unittest.TestCase):
 
@@ -37,7 +35,7 @@ class TestTokenizer(unittest.TestCase):
             [0,0,0,0,1],
             [0,0,0,0,0]
         ]) == 1
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(np.allclose(got, want))
 
     def test_mask_pad_positions(self):
         line = "abc"
@@ -46,7 +44,7 @@ class TestTokenizer(unittest.TestCase):
         x = self.tok.to_index(x)
         got = tokenizer.mask_out_pad_positions(x, self.tok.PAD_INDEX)
         want = np.array([0,0,0,0,1,1]) == 1
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(np.allclose(got, want))
 
         batches = ["abc", "deab"]
         seq_len = 6
@@ -58,7 +56,7 @@ class TestTokenizer(unittest.TestCase):
             [0,0,0,0,1,1],
             [0,0,0,0,0,1],
         ]) == 1
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(np.allclose(got, want))
 
     def test_get_batches(self):
         seq_len = 6

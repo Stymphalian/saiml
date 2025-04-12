@@ -1,10 +1,13 @@
 import numpy as np
+import cupy as cp
+import numpy
+from devices import xp
 
-def numericalGradientCheck(fn, parameters: np.array, predictedGradient, h=1e-7):
+def numericalGradientCheck(fn, parameters: xp.array, predictedGradient, h=1e-7):
     if predictedGradient.shape != parameters.shape:
         raise Exception("Gradients and parameters must be of the same shape")
 
-    numericGradient = np.zeros(parameters.shape, dtype=np.float64)
+    numericGradient = xp.zeros(parameters.shape, dtype=xp.float64)
     for i in range(len(parameters)):
         if i % 1000 == 0:
             print("Checking gradient for parameters {0}/{1}".format(i, len(parameters)))
@@ -16,9 +19,9 @@ def numericalGradientCheck(fn, parameters: np.array, predictedGradient, h=1e-7):
         parameters[i][0] = oldX
         numericGradient[i][0] = (x1 - x2) / (2*h)
 
-    numerator = np.linalg.norm(numericGradient - predictedGradient)
-    # denominator = np.linalg.norm(numericGradient + predictedGradient)
-    # denominator = np.linalg.norm(numericGradient) + np.linalg.norm(predictedGradient)
+    numerator = xp.linalg.norm(numericGradient - predictedGradient)
+    # denominator = xp.linalg.norm(numericGradient + predictedGradient)
+    # denominator = xp.linalg.norm(numericGradient) + xp.linalg.norm(predictedGradient)
     # diff = numerator / denominator
     diff = numerator
     return numericGradient, diff
@@ -29,18 +32,18 @@ def covariance_matrix(data):
     data should be of shape (num_samples, num_features)
     """
     n = data.shape[0]
-    means = np.mean(data, axis=0)
+    means = xp.mean(data, axis=0)
     x = data - means
-    return np.dot(x.T, x) / n
-    # np.cov(data, rowvar=False)
+    return xp.dot(x.T, x) / n
+    # xp.cov(data, rowvar=False)
     # def covariance(data, means, i, j):
     #     mean_i = means[i]
     #     mean_j = means[j]
-    #     mean_ij = np.mean(data[:,i] * data[:, j])
+    #     mean_ij = xp.mean(data[:,i] * data[:, j])
     #     return mean_ij - mean_i * mean_j
     # n = data.shape[1]
-    # cm = np.zeros((n,n))
-    # means = np.mean(data, axis=0)
+    # cm = xp.zeros((n,n))
+    # means = xp.mean(data, axis=0)
     # for i in range(n):
     #     for j in range(i, n):
     #         val = covariance(data, means, i, j)            
@@ -56,31 +59,32 @@ def standardize_dataset(data):
     """
     # return Standardize_data(data)
     for y in range(data.shape[1]):
-        # min_value = np.min(data[:,y])
-        # max_value = np.max(data[:,y])
+        # min_value = xp.min(data[:,y])
+        # max_value = xp.max(data[:,y])
         # data[:,y] = (data[:,y] - min_value) / (max_value - min_value)
-        xmean = np.mean(data[:,y])
-        xstd = np.std(data[:,y])
+        xmean = xp.mean(data[:,y])
+        xstd = xp.std(data[:,y])
         data[:,y] = (data[:,y] - xmean) / xstd
     return data
 
 
 def onehot_encode(y, size):
-    return np.identity(size)[y].reshape(size, 1)
-    # onehot = np.zeros(size)
+    return xp.identity(size)[y].reshape(size, 1)
+    # onehot = xp.zeros(size)
     # onehot[y] = 1
     # return onehot.reshape(size, 1)
 
 def onehot_decode(y):
-    return np.argmax(y)
+    return xp.argmax(y)
 
 def create_batches(data, batch_size):
     n = data.shape[0]
     if n % batch_size != 0:
         raise Exception("Number of samples is not divisible by batch size")
     m = n // batch_size
-    batches = np.vsplit(data, m)
-    return np.array(batches)
+    batches = xp.vsplit(data, m)
+    return xp.array(batches)
+
 
 def zero_dilate(x, space, axes=None):
     """
@@ -93,8 +97,13 @@ def zero_dilate(x, space, axes=None):
                   00000
                   70809
     """
+    # TODO: Change this to pure device.xp code
     if space == 0:
         return x
+    
+    if isinstance(x, cp.ndarray):
+        x = cp.asnumpy(x)
+
     if axes is None:
         axes = range(x.ndim)
     if x.ndim < len(axes):
@@ -103,8 +112,8 @@ def zero_dilate(x, space, axes=None):
     for s in range(space):
         for axis in axes:
             shape_len = a.shape[axis]
-            a = np.insert(a, range(1, shape_len, s+1), 0, axis=axis)
-    return a  
+            a = numpy.insert(a, range(1, shape_len, s+1), 0, axis=axis)
+    return xp.array(a)
 
 def zero_undilate(x, space, axes=None):
     """
@@ -128,7 +137,7 @@ def zero_undilate(x, space, axes=None):
         shape_len = a.shape[axis]
         axes_to_remove = range(1, shape_len, space+1)
         axes_to_remove = [range(x,x+space) for x in axes_to_remove]
-        a = np.delete(a, axes_to_remove, axis=axis)
+        a = xp.delete(a, axes_to_remove, axis=axis)
     return a
 
 def zero_dilate_2d(x, space):
@@ -138,13 +147,13 @@ def zero_dilate_2d(x, space):
     # a = x
     # for s in range(space):
     #     height, width = a.shape
-    #     a = np.insert(a, range(1, height, s+1), 0, axis=0)
-    #     a = np.insert(a, range(1, width, s+1), 0, axis=1)
+    #     a = xp.insert(a, range(1, height, s+1), 0, axis=0)
+    #     a = xp.insert(a, range(1, width, s+1), 0, axis=1)
     # return a    
     # height, width = X.shape
     # new_height = height + (height-1)*space
     # new_width = width + (width-1)*space
-    # Y = np.zeros((new_height, new_width))
+    # Y = xp.zeros((new_height, new_width))
     # for row in range(height):
     #     new_row = row + row*space
     #     for col in range(width):
@@ -162,15 +171,15 @@ def zero_undilate_2d(x, space):
     # vert = range(1, height, space+1)
     # horz = [range(x,x+space) for x in horz]
     # vert = [range(x,x+space) for x in vert]
-    # a = np.delete(a, vert, axis=0)
-    # a = np.delete(a, horz, axis=1)
+    # a = xp.delete(a, vert, axis=0)
+    # a = xp.delete(a, horz, axis=1)
     # return a
     # if space == 0:
     #     return X
     # new_height, new_width = X.shape
     # height = (new_height + space) // (1 + space)
     # width = (new_width + space) // (1 + space)
-    # Y = np.zeros((height, width))
+    # Y = xp.zeros((height, width))
     # for row in range(height):
     #     new_row = row + row*space
     #     for col in range(width):
@@ -189,7 +198,7 @@ def zero_pad(x, pad, axes=None):
     for axis in axes:
         pads[axis] = padding
 
-    x_pad = np.pad(x, pads, mode='constant', constant_values=0)
+    x_pad = xp.pad(x, pads, mode='constant', constant_values=0)
     return x_pad
 
 def zero_pad2(X, pad):
@@ -210,7 +219,7 @@ def zero_pad2(X, pad):
     #     return X
     
     # ### START CODE HERE ### (≈ 1 line)
-    # X_pad = np.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad)), 'constant', constant_values = (0,0))
+    # X_pad = xp.pad(X, ((0,0), (0,0), (pad,pad), (pad,pad)), 'constant', constant_values = (0,0))
     # ### END CODE HERE ###
     
     # return X_pad

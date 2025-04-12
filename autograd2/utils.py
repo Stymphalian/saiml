@@ -1,6 +1,5 @@
 
-from collections import defaultdict
-import numpy as np
+from devices import xp
 
 def toposort(end_node):
     """
@@ -40,11 +39,11 @@ def toposort(end_node):
                 child_counts[parent] -= 1
 
 def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progress=False):    
-    numericGradients = np.zeros(len(params))
+    numericGradients = xp.zeros(len(params))
     for param in range(len(params)):
         if print_progress and param % 1000 == 0:
             print("Param {}/{}".format(param, len(params)))
-        saved = params[param]
+        saved = float(params[param])
 
         params[param] += tol
         loss1 = fn(params)
@@ -56,12 +55,12 @@ def numeric_gradient_check(fn, params, predictedGradients, tol=1e-6, print_progr
 
         numericGradients[param] = (loss1 - loss2) / (2*tol)
 
-    numericGradients = np.round(numericGradients, 12)
-    predictedGradients = np.round(predictedGradients, 12)
+    numericGradients = xp.round(numericGradients, 12)
+    predictedGradients = xp.round(predictedGradients, 12)
     numericGradients += 1e-12
     predictedGradients += 1e-12
-    ratio = np.linalg.norm(numericGradients - predictedGradients)
-    ratio /= max(np.linalg.norm(numericGradients), np.linalg.norm(predictedGradients))
+    ratio = xp.linalg.norm(numericGradients - predictedGradients)
+    ratio /= max(xp.linalg.norm(numericGradients), xp.linalg.norm(predictedGradients))
     return numericGradients, ratio
 
 

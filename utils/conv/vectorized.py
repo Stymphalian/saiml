@@ -1,4 +1,4 @@
-
+from devices import xp
 from .conv_utils import *
 
 def _convolve2d_vectorized(x, kernel, stride=1, padding=0, dilate=0):
@@ -13,9 +13,9 @@ def _convolve2d_vectorized(x, kernel, stride=1, padding=0, dilate=0):
     x_pad = utils.zero_pad(x, padding, axes=(1,2))
     x_prime = x_pad[:, rows, cols]
     flat_kernel = kernel.reshape(kernel.shape[0], -1, 1)
-    z = np.matmul(x_prime, flat_kernel)
-    z = np.sum(z, axis=0)
-    z = np.reshape(z, (1, new_height, new_width))
+    z = xp.matmul(x_prime, flat_kernel)
+    z = xp.sum(z, axis=0)
+    z = xp.reshape(z, (1, new_height, new_width))
     return z
 
 def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, padding=0, dilate=0):
@@ -28,16 +28,16 @@ def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, padding=0, dil
     xpad = utils.zero_pad(x, padding, axes=(1,2))
 
     vkernel = vectorize_kernel(x.shape, kernel, stride, padding)
-    vkernel = np.transpose(vkernel, (0,2,1))
+    vkernel = xp.transpose(vkernel, (0,2,1))
     outGrad = outGrad.flatten().reshape(1,-1,1)
-    dx = np.matmul(vkernel, outGrad).reshape(xpad.shape)
+    dx = xp.matmul(vkernel, outGrad).reshape(xpad.shape)
     if padding > 0:
         dx = dx[:, padding:-padding, padding:-padding]
 
     rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
     x2 = xpad[:, rows, cols]
-    x2 = np.transpose(x2, (0,2,1))
-    dk = np.matmul(x2, outGrad).reshape(kernel.shape)
+    x2 = xp.transpose(x2, (0,2,1))
+    dk = xp.matmul(x2, outGrad).reshape(kernel.shape)
 
     return (dx, dk)
 
@@ -63,8 +63,8 @@ def _pool2d_vectorized(x, kernel_size, pool_func, stride=1, padding=0):
     rows, cols = get_convolution_positions(x.shape, (kc, kh, kw), stride)
     x1 = x[:, rows, cols]
     x2 = pool_func(x1)
-    # x2 = np.max(x1, axis=2)
-    x3 = np.reshape(x2, (xc, new_height, new_width))
+    # x2 = xp.max(x1, axis=2)
+    x3 = xp.reshape(x2, (xc, new_height, new_width))
     return x3
 
 def _pool2d_gradient_vectorized(x, kernel_size, outGrad, pool_fn, stride=1, padding=0):
@@ -79,13 +79,13 @@ def _pool2d_gradient_vectorized(x, kernel_size, outGrad, pool_fn, stride=1, padd
     vkernel = vectorize_kernel_with_fn(x, (kc, kh, kw), pool_fn, stride)
     assert vkernel.shape == (xc*new_height*new_width, xc*xh*xw)
 
-    dx = np.matmul(vkernel.T, outGrad.reshape(-1))
-    dx = np.reshape(dx, x.shape)
+    dx = xp.matmul(vkernel.T, outGrad.reshape(-1))
+    dx = xp.reshape(dx, x.shape)
     return dx
 
 
 def _max_pool2d_vectorized(x, kernel_size, stride=1, padding=0):
-    max_fn = lambda x : np.max(x, axis=2)
+    max_fn = lambda x : xp.max(x, axis=2)
     return _pool2d_vectorized(x, kernel_size, max_fn, stride, padding)
     # assert x.ndim == 3
     # xc, xh, xw = x.shape
@@ -97,25 +97,25 @@ def _max_pool2d_vectorized(x, kernel_size, stride=1, padding=0):
     # rows, cols = get_convolution_positions(x.shape, (kc, kh, kw), stride)
     # xpad = utils.zero_pad(x, padding, axes=(1,2))
     # x1 = xpad[:, rows, cols]
-    # x2 = np.max(x1, axis=2)
-    # x3 = np.reshape(x2, (1, new_height, new_width))
+    # x2 = xp.max(x1, axis=2)
+    # x3 = xp.reshape(x2, (1, new_height, new_width))
     # return x3
 
 def _max_pool2d_gradient_vectorized(x, kernel_size, outGrad, stride=1, padding=0):
-    # max_fn = lambda x: np.max(x, axis=2)
+    # max_fn = lambda x: xp.max(x, axis=2)
 
     def max_fn(flat_vx, rows, cols):
         xc, xh, xw = x.shape
-        max_x = np.argmax(flat_vx, axis=1)
+        max_x = xp.argmax(flat_vx, axis=1)
     
-        linear = np.mod(np.arange(max_x.size), len(rows))
-        offset = np.repeat(np.arange(xc)*xh, len(rows))
+        linear = xp.mod(xp.arange(max_x.size), len(rows))
+        offset = xp.repeat(xp.arange(xc)*xh, len(rows))
         r = rows[linear, max_x] + offset
         c = cols[linear, max_x]
 
-        flat_x = np.concatenate(x, axis=0)
-        indices = np.ravel_multi_index((r,c), dims=flat_x.shape)
-        x_identity = np.identity(flat_x.size)
+        flat_x = xp.concatenate(x, axis=0)
+        indices = xp.ravel_multi_index((r,c), dims=flat_x.shape)
+        x_identity = xp.identity(flat_x.size)
         vk = x_identity[indices]
         return vk
 
@@ -138,29 +138,29 @@ def _max_pool2d_gradient_vectorized(x, kernel_size, outGrad, stride=1, padding=0
     # vkernel = vectorize_kernel_maxpool(x, (kc, kh, kw), stride)
     # assert vkernel.shape == (new_height*new_width, xc*xh*xw)
 
-    # dx = np.matmul(vkernel.T, outGrad.reshape(-1))
-    # dx = np.reshape(dx, x.shape)
+    # dx = xp.matmul(vkernel.T, outGrad.reshape(-1))
+    # dx = xp.reshape(dx, x.shape)
     # return dx
 
 def _avg_pool2d_vectorized(x, kernel_size, stride=1, padding=0):
-    fn = lambda x : np.mean(x, axis=2)
+    fn = lambda x : xp.mean(x, axis=2)
     return _pool2d_vectorized(x, kernel_size, fn, stride, padding)
 
 def _avg_pool2d_gradient_vectorized(x, kernel_size, outGrad, stride=1, padding=0):
-    # max_fn = lambda x: np.max(x, axis=2)
+    # max_fn = lambda x: xp.max(x, axis=2)
 
     def max_fn(flat_vx, rows, cols):
         xc, xh, xw = x.shape
-        max_x = np.argmax(flat_vx, axis=1)
+        max_x = xp.argmax(flat_vx, axis=1)
     
-        linear = np.mod(np.arange(max_x.size), len(rows))
-        offset = np.repeat(np.arange(xc)*xh, len(rows))
+        linear = xp.mod(xp.arange(max_x.size), len(rows))
+        offset = xp.repeat(xp.arange(xc)*xh, len(rows))
         r = rows[linear, max_x] + offset
         c = cols[linear, max_x]
 
-        flat_x = np.concatenate(x, axis=0)
-        indices = np.ravel_multi_index((r,c), dims=flat_x.shape)
-        x_identity = np.identity(flat_x.size)
+        flat_x = xp.concatenate(x, axis=0)
+        indices = xp.ravel_multi_index((r,c), dims=flat_x.shape)
+        x_identity = xp.identity(flat_x.size)
         vk = x_identity[indices]
         return vk
 

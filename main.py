@@ -1,15 +1,15 @@
 import os
-import numpy as np
-
 from typing import *
 from pprint import pprint
-import utils
+
 import autograd2 as ag
+from devices import xp
 from layers import *
 from dataloader.shakespeare import ShakespeareDataLoader
-# from tokenizer import Tokenizer
 import tokenizer
 import optimizer
+import cupy as cp
+import numpy as np
 
 
 class CharGPT(Module):
@@ -35,6 +35,7 @@ class CharGPT(Module):
             PositionalEncoding(seq_len, self.embed_dims),
         ])
 
+        # 15
         self.blocks = [
             DecoderBlock(
                 seq_len,
@@ -70,9 +71,7 @@ class CharGPT(Module):
     
     def loss(self, y_pred, y_true):
         b, n, d_value = y_pred.shape
-        # loss = ag.cross_entropy_loss(y_pred, y_true)
         loss = ag.cross_entropy_loss(y_pred, y_true, axis=(2,))
-        # loss = ag.summation(loss, axis=1)
         loss = ag.mean(loss)
         return loss
     
@@ -98,7 +97,6 @@ def train(
             pred = model.forward(x, x_mask=x_mask)
             loss = model.loss(pred, y)
             loss.backward()
-            model.backward(context)
             context["optimizer"].iteration += 1
             error += loss.value()
             print("Batch Number {:3d}: error {}".format(batch_num, loss.value()))
@@ -106,16 +104,15 @@ def train(
 
         print(f"Epoch {epoch+1}/{number_epochs} - Error: {error}")
 
-    
 def main():
-    np.random.rand(0)
+    xp.random.seed(0)
     dl = ShakespeareDataLoader("data/shakespeare.txt")
     dl.load_data()
     tok = tokenizer.Tokenizer(dl.vocab)
 
-    seq_len = 64
-    embed_dims = 128
-    batch_size = 32
+    seq_len = 128
+    embed_dims = 256
+    batch_size = 64
     model = CharGPT(seq_len, len(tok.vocab), embed_dims=embed_dims)
 
     x_train_batches = tokenizer.get_batches(dl.x_train, seq_len-1, batch_size)
@@ -128,8 +125,10 @@ def main():
         tokenizer.convert_batches_to_numpy_with_mask(b1, tok, seq_len)
         for b1 in y_train_batches
     ]
-    x_train_batches = [(ag.Tensor(x), ag.Tensor(x_mask)) for x, x_mask in x_train_batches]
-    y_train_batches = [(ag.Tensor(y), ag.Tensor(y_mask)) for y, y_mask in y_train_batches]
+    # x_train_batches = [(ag.Tensor(x), ag.Tensor(x_mask)) for x, x_mask in x_train_batches]
+    # y_train_batches = [(ag.Tensor(y), ag.Tensor(y_mask)) for y, y_mask in y_train_batches]
+    x_train_batches = [(ag.Tensor(x), None) for x, x_mask in x_train_batches]
+    y_train_batches = [(ag.Tensor(y), None) for y, y_mask in y_train_batches]
 
     train(model, x_train_batches, y_train_batches)
 

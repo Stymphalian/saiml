@@ -1,5 +1,5 @@
 import unittest
-import numpy as np
+from devices import xp
 import utils
 from scipy import signal
 
@@ -7,23 +7,23 @@ from scipy import signal
 class TestUtils(unittest.TestCase):
 
     def test_zero_pad_shape(self):
-        np.random.seed(1)
-        x = np.random.randn(4, 2, 3, 3)
+        xp.random.seed(1)
+        x = xp.random.randn(4, 2, 3, 3)
         x_pad = utils.zero_pad2(x, 2)
         self.assertEqual(x_pad.shape, (4, 2, 7, 7))
 
     def test_zero_pad(self):
-        image1 = np.array([
-            np.ones((3,3)),
-            np.ones((3,3))*2
+        image1 = xp.array([
+            xp.ones((3,3)),
+            xp.ones((3,3))*2
         ])
-        image2 = np.array([
-            np.ones((3,3))*3,
-            np.ones((3,3))*4
+        image2 = xp.array([
+            xp.ones((3,3))*3,
+            xp.ones((3,3))*4
         ])
-        X = np.array([image1, image2])
+        X = xp.array([image1, image2])
 
-        image1 = np.array([
+        image1 = xp.array([
             [
                 [0,0,0,0,0,0,0],
                 [0,0,0,0,0,0,0],
@@ -43,7 +43,7 @@ class TestUtils(unittest.TestCase):
                 [0,0,0,0,0,0,0]
             ]
         ])
-        image2 = np.array([
+        image2 = xp.array([
             [
                 [0,0,0,0,0,0,0],
                 [0,0,0,0,0,0,0],
@@ -63,13 +63,13 @@ class TestUtils(unittest.TestCase):
                 [0,0,0,0,0,0,0]
             ]
         ])
-        want = np.array([image1, image2])
+        want = xp.array([image1, image2])
         got = utils.zero_pad2(X, 2)
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(xp.array_equal(got, want))
 
     def test_general_dilate(self):
-        x = np.arange(2*9).reshape(2,3,3) + 1
-        want = np.array([
+        x = xp.arange(2*9).reshape(2,3,3) + 1
+        want = xp.array([
             [
                 [1,0,2,0,3],
                 [0,0,0,0,0],
@@ -87,12 +87,12 @@ class TestUtils(unittest.TestCase):
             
         ])
         got = utils.zero_dilate(x, 1, axes=(1,2))
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(xp.array_equal(got, want))
 
 
     def test_dilate(self):
-        X = np.arange(9).reshape(3,3) + 1
-        want = np.array([
+        X = xp.arange(9).reshape(3,3) + 1
+        want = xp.array([
             [1,0,2,0,3],
             [0,0,0,0,0],
             [4,0,5,0,6],
@@ -100,11 +100,11 @@ class TestUtils(unittest.TestCase):
             [7,0,8,0,9],
         ])
         got = utils.zero_dilate_2d(X, 1)
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(xp.array_equal(got, want))
 
     def test_dilate2(self):
-        X = np.arange(9).reshape(3,3) + 1
-        want = np.array([
+        X = xp.arange(9).reshape(3,3) + 1
+        want = xp.array([
             [1,0,0,2,0,0,3],
             [0,0,0,0,0,0,0],
             [0,0,0,0,0,0,0],
@@ -114,12 +114,12 @@ class TestUtils(unittest.TestCase):
             [7,0,0,8,0,0,9],
         ])
         got = utils.zero_dilate_2d(X, 2)
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(xp.array_equal(got, want))
 
 
     def test_dilate_not_symmetric(self):
-        X = np.arange(15).reshape(3,5) + 1
-        want = np.array([
+        X = xp.arange(15).reshape(3,5) + 1
+        want = xp.array([
             [1,  0,  2,  0,  3,  0,  4,  0,  5],  
             [0,  0,  0,  0,  0,  0,  0,  0,  0],  
             [6,  0,  7,  0,  8,  0,  9,  0,  10],  
@@ -127,12 +127,12 @@ class TestUtils(unittest.TestCase):
             [11, 0,  12, 0,  13, 0,  14, 0,  15],
         ])
         got = utils.zero_dilate_2d(X, 1)
-        self.assertTrue(np.array_equal(got, want))
+        self.assertTrue(xp.array_equal(got, want))
 
     def test_dilate2d_2(self):
-        X = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=np.float64)
+        X = xp.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]], dtype=xp.float64)
         dilated = utils.zero_dilate_2d(X, 3)
-        expected = np.array([
+        expected = xp.array([
             [1, 0, 0, 0, 2, 0, 0, 0, 3],
             [0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -142,11 +142,11 @@ class TestUtils(unittest.TestCase):
             [0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0],
             [7, 0, 0, 0, 8, 0, 0, 0, 9],
-        ], dtype=np.float64)
-        self.assertTrue(np.array_equal(dilated, expected))
+        ], dtype=xp.float64)
+        self.assertTrue(xp.array_equal(dilated, expected))
 
         undilated = utils.zero_undilate_2d(dilated, 3)
-        self.assertTrue(np.array_equal(undilated, X))
+        self.assertTrue(xp.array_equal(undilated, X))
     
 
 if __name__ == '__main__':

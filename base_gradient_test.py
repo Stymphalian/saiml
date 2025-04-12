@@ -1,18 +1,18 @@
-import numpy as np
 import unittest
 import autograd2 as ag
+from devices import xp
 
 class NumericalGradientTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        np.random.seed(1)
+        xp.random.seed(1)
 
     def numeric_check(self, forward, *inputs, threshold=1e-6, do_print=False):
-        params = np.concatenate([x.value().reshape(-1) for x in inputs])
+        params = xp.concatenate([x.value().reshape(-1) for x in inputs])
         y = forward(params)
         y.backward()
-        predGrads = np.concatenate([x.grad.value().reshape(-1) for x in inputs])
+        predGrads = xp.concatenate([x.grad.value().reshape(-1) for x in inputs])
         
         def forward2(params):
             z1 = forward(params)
