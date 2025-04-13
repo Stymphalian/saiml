@@ -399,7 +399,7 @@ class DecoderBlock(Module):
             self.params += [
                 self.norm2,
                 self.encoder_attention,
-            ]
+            ]        
 
     def forward(self, x, memory=None, x_mask=None):
         # b, n, k = x.shape

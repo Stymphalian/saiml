@@ -8,9 +8,9 @@ class GPUDevice(Device):
     
     def array(self, *args, **kwargs):
         return cp.array(*args, **kwargs)
-    
-    def from_numpy(self, *args, **kwargs):
-        return cp.array(*args, **kwargs)
+        
+    def to_numpy(self, arr, *args, **kwargs):
+        return cp.asnumpy(arr, *args, **kwargs)  
 
 xp = cp
 xp_ndarray = xp.ndarray

@@ -9,7 +9,7 @@ class CPUDevice(Device):
     def array(self, *args, **kwargs):
         return np.array(*args, **kwargs)
     
-    def from_numpy(self, arr, *args, **kwargs):
+    def to_numpy(self, arr, *args, **kwargs):
         return arr
 
 xp = np

@@ -1,7 +1,9 @@
 import numpy 
+import cupy
 from typing import *
 from ..base import Operator, Tensor, TensorTuple
 from devices import xp, xp_ndarray
+import devices
 
 
 def get_broadcast_shape(x, axis):
@@ -378,10 +380,9 @@ class TensorPower(Operator):
         assert (dx.shape == x.shape)
         return dx
     
+def argmax_axes(x: numpy.ndarray, axes, keepdims=True):
+    assert isinstance(x, numpy.ndarray)
 
-# TODO: argmax_axes should return in the same format as xp.argmax
-# The reshaping into the dx format should happen outside of this method
-def argmax_axes(x, axes, keepdims=True):
     # Handle axes with negative indexing
     axes = [axis if axis >= 0 else x.ndim + axis for axis in axes]
 
@@ -390,28 +391,39 @@ def argmax_axes(x, axes, keepdims=True):
     axes_shape = tuple([x.shape[axis] for axis in axes])
     rest_axes_shape = tuple([x.shape[axis] for axis in rest_axes])
     rest_axes_size = numpy.prod(rest_axes_shape)
+    dx_shape = [
+        x.shape[axis] if axis not in axes else 1
+        for axis in range(x.ndim)
+    ]
      
-    dx = xp.zeros(x.shape)
+    # TODO: Find a way to do this in purely cupy
+    dx = numpy.zeros(dx_shape, dtype=numpy.int64)
     for i in range(rest_axes_size):
-        rest_axes_coords = xp.unravel_index(xp.array(i), rest_axes_shape)
+        rest_axes_coords = numpy.unravel_index(numpy.array(i), rest_axes_shape)
         assert len(rest_axes_coords) == len(rest_axes)
 
         indexing = [slice(None)]*x.ndim
         for axis, coord in zip(rest_axes, rest_axes_coords):
             indexing[axis] = coord
 
-        # Assign a 1 into the place into the place where the max is found
-        maxindex = xp.argmax(x[tuple(indexing)])
-        coords = xp.unravel_index(maxindex, axes_shape)
+        # Find "local" coordinates of maximum (ie. within the "axes" shape)
+        max_index = numpy.argmax(x[tuple(indexing)])
+        coords = numpy.unravel_index(max_index, axes_shape)
+        
         assert len(coords) == len(axes)
+        # Find the "true" index with respect to the full shape of x
         for axis, coord in zip(axes, coords):
             indexing[axis] = coord
-        dx[tuple(indexing)] = 1
+        true_index = numpy.ravel_multi_index(tuple(indexing), x.shape)
+
+        # Put the true_index into the correct location
+        for axis in axes:
+            indexing[axis] = 0
+        dx[tuple(indexing)] = true_index
 
     if not keepdims:
-        # TODO: This doesn't work
-        raise NotImplementedError()
-        dx = xp.squeeze(dx, axis=rest_axes)
+        # Remove the '1' dimensions in the dx shape (5,1,4) -> (5,4)
+        dx = numpy.squeeze(dx)
     return dx
         
 class TensorMax(Operator):
@@ -426,19 +438,15 @@ class TensorMax(Operator):
             xi = xp.argmax(x.value())
             dx = xp.zeros(x.shape)
             xp.put(dx, xi, 1)
-        elif isinstance(self.axis, int):
-            # xi = xp.argmax(x.value(), axis=self.axis, keepdims=True)
-            # dx = xp.zeros(x.shape)
-            # xp.put_along_axis(dx, xi, 1, axis=self.axis)
-            # outGradShape, _ = get_broadcast_shape(x, self.axis)
-            # outGrad = outGrad.reshape(outGradShape)
-            axis = (self.axis,)
-            dx = argmax_axes(x.value(), axis)
-            outGradShape, _ = get_broadcast_shape(x, axis)
-            outGrad = outGrad.reshape(outGradShape)
         else:
-            dx = argmax_axes(x.value(), self.axis)
-            outGradShape, _ = get_broadcast_shape(x, self.axis)
+            axis = self.axis
+            if isinstance(self.axis, int):
+                axis = (self.axis,)
+            xi = argmax_axes(x.numpy(), axis, keepdims=True)
+            dx = xp.zeros(x.shape)
+            xp.put(dx, xp.array(xi), 1)
+
+            outGradShape, _ = get_broadcast_shape(x, axis)
             outGrad = outGrad.reshape(outGradShape)
 
         dx = outGrad * Tensor(dx)
@@ -641,7 +649,7 @@ class TensorReshape(Operator):
         self.shape = shape
     def compute(self, *inputs: Tuple[Tensor]):
         return inputs[0].value().reshape(self.shape)
-    def gradients(self, node, outGrad):
+    def gradients(self, node, outGrad: Tensor):
         dx = outGrad.reshape(node.inputs[0].shape)
         assert dx.shape == node.inputs[0].shape
         return dx
@@ -849,7 +857,6 @@ class TensorSplit(Operator):
 
         assert dx.shape == x.shape, f"dx shape: {dx.shape}, x shape: {x.shape}"
         return dx
-
 
 def constant(a):
     return Tensor(a, requires_grad=False)

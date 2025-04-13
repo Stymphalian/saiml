@@ -1,4 +1,4 @@
-use_cpu = True
+use_cpu = False
 from .device import *
 
 if use_cpu:

@@ -1,5 +1,5 @@
-import numpy as np
 import autograd2 as ag
+from devices import xp
 from typing import *
 
 def _unpack_params(value: object) -> List[ag.Tensor]:
@@ -20,7 +20,7 @@ def _unpack_params(value: object) -> List[ag.Tensor]:
     else:
         return []
     
-def _pack_params(value: object, flat_params: np.ndarray):
+def _pack_params(value: object, flat_params: xp.ndarray):
     if isinstance(value, ag.Tensor):
         value._data = flat_params.reshape(value.shape)
     elif isinstance(value, Module):
@@ -63,24 +63,33 @@ class Module:
             else:
                 raise Exception(f"Unknown param type {type(param)}")
 
+    def total_bytes(self):
+        total = 0
+        for param in self.params:
+            if isinstance(param, ag.Tensor):
+                total += param.value().nbytes
+            elif isinstance(param, Module):
+                total += param.total_bytes()
+        return total
+
     def unpack_params(self):
         return _unpack_params(self.params)
 
     def get_params(self):
         params = self.unpack_params()
         flat_params = [p.value().reshape(-1) for p in params]
-        return np.concatenate(flat_params)
+        return xp.concatenate(flat_params)
     
     def get_grads(self):
         params = self.unpack_params()
         grads = [x.grad.value().reshape(-1) for x in params]
-        return np.concatenate(grads)
+        return xp.concatenate(grads)
     
     def get_params_and_grads(self):
         params = self.unpack_params()
         flat_params = [p.value().reshape(-1) for p in params]
         grads = [x.grad.value().reshape(-1) for x in params]
-        return (np.concatenate(flat_params), np.concatenate(grads))
+        return (xp.concatenate(flat_params), xp.concatenate(grads))
     
     def set_params(self, flat_params):
         _pack_params(self.params, flat_params)

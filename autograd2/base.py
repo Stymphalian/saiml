@@ -58,7 +58,7 @@ class Tensor(Node):
             data, 
             operator: Optional[Operator]=None,
             requires_grad=False,
-            dtype=xp.float64, 
+            dtype=None, 
             name="",
             inputs: Tuple["Tensor"]=(),
             device:devices.Device=devices.default_device(),
@@ -69,13 +69,16 @@ class Tensor(Node):
             raise Exception("Should not be Tensor/TensorTuple")
         elif isinstance(data, xp_ndarray):
             self._data = data
+            if dtype is not None and dtype != self._data.dtype:
+                self._data = self._data.astype(dtype)
         else:
-            # self._data = device.from_numpy(data, dtype=dtype)
-            self._data = xp.array(data, dtype=dtype)
-            
-
+            if dtype is None:
+                self._data = xp.array(data)
+            else:
+                self._data = xp.array(data, dtype=dtype)
+                
         self._grad = None
-        self.dtype = dtype
+        self.dtype = self._data.dtype
         self.operator = operator
         self.inputs = inputs
         self.requires_grad = requires_grad
@@ -118,7 +121,7 @@ class Tensor(Node):
 
     def gradients(self, outGrad) -> Tuple[any]:
         if self.operator is None:
-            return (ag.mult(outGrad, self.ones()),)
+            return (outGrad,)
 
         grads = self.operator.gradients(self, outGrad)
         if type(grads) is not tuple:
@@ -326,6 +329,7 @@ def grad(node: Union[Tensor, TensorTuple], outGrad=None):
 
         for pi, p in enumerate(v.inputs):
             node_to_grads[p.id].append(dy_dp[pi])        
+
     return node_to_grads
 
 class Parameter(Tensor):

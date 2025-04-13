@@ -1,8 +1,7 @@
 import unittest
 import autograd2 as ag
 import base_gradient_test
-import devices
-xp = devices.xp
+from devices import xp
 
 class TestAutogradOperators(base_gradient_test.NumericalGradientTest):
 
