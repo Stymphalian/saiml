@@ -9,3 +9,5 @@ else:
     from .cupy_backend import default_device
     from .cupy_backend import xp
     from .cupy_backend import xp_ndarray
+    from .cupy_backend import print_memory
+    from .cupy_backend import memory_used

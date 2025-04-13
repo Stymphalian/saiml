@@ -45,7 +45,16 @@ class Operator:
         """
         Return a new tensor which uses this operator to compute its value/gradient.
         """
+
+        # inputs_size_byte = sum([i.value().nbytes for i in inputs])
+        # memory_used = devices.memory_used()
         data = self.compute(*inputs)
+        # memory_increase = devices.memory_used() - memory_used
+        # print("Operator: {}, InputSize: {:.2f} MB, Memory Increase: {:.2f} MB".format(
+        #     self.__class__.__name__,
+        #     inputs_size_byte / (1024*1024),
+        #     memory_increase / (1024*1024),
+        # ))
         return Tensor(data, operator=self, inputs=inputs)
     
     def tensor_tuple(self, *inputs):
