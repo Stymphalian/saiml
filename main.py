@@ -1,5 +1,6 @@
 import os
 import timeit
+import time
 from typing import *
 from pprint import pprint
 
@@ -48,17 +49,35 @@ class CharGPT(Module):
 
         self.logits = Sequence([
             Linear(self.embed_dims, self.vocab_len),
-            LogSoftmax()
+            BatchSoftmax()
         ])
 
         self.params = [self.source_embedding] 
         self.params.extend(self.blocks)
         self.params += [self.norm, self.logits]
 
+    def onehot_encode(self, x, pad_index=0):
+        #TODO: pad_index should come from the tokenizer
+        #TODO: Make this more efficient
+        b, n = x.shape
+        assert n <= self.seq_len
+        n = self.seq_len
+        x_pad = xp.pad(
+            x.value(),
+            ((0,0), (0, n - x.shape[1])),
+            mode='constant',
+            constant_values=pad_index)
+        
+        eye = xp.eye(self.vocab_len)
+        y = eye[x_pad]
+        return ag.Tensor(y)
 
     def forward(self, x, x_mask=None):
+        b, n = x.shape                               # (b,n)
+        y = self.onehot_encode(x)                    # (b,n,d_vocab)
+
         # embeddings
-        y = self.source_embedding.forward(x)         # (b,n,d_embed)
+        y = self.source_embedding.forward(y)         # (b,n,d_embed)
 
         # encoder
         for block in self.blocks:
@@ -71,92 +90,120 @@ class CharGPT(Module):
     
     def loss(self, y_pred, y_true):
         b, n, d_value = y_pred.shape
+        y_true = self.onehot_encode(y_true)          # (b,n,d_vocab)
         loss = ag.cross_entropy_loss(y_pred, y_true, axis=(2,))
         loss = ag.mean(loss)
         return loss
+
+    def generate(self, context, max_new_tokens):
+        assert context.ndim == 2
+        b, n = context.shape
+
+        cumulative = context.value()
+        for _ in range(max_new_tokens):
+            # trim back down to seq_len
+            if cumulative.shape[1] > self.seq_len:
+                input_context = cumulative[:, -self.seq_len:]
+            else:
+                input_context = cumulative
+            
+            # run the model
+            input_context = ag.Tensor(input_context)
+            logits = self.forward(input_context).value()            # (b, n, d_vocab)
+            logits = logits[:, -1, :]                               # (b, d_vocab)
+
+            # sample
+            next_idxs = [xp.argmax(xp.random.multinomial(1, logits[b])) for b in range(b)]
+            next_idxs = xp.array(next_idxs).reshape((b,1))                        # (b, n)
+            cumulative = xp.concatenate((cumulative, next_idxs), axis=1)          # (b, n+1)
+
+        return ag.Tensor(cumulative)
     
 
 def train(
         model: CharGPT,
-        x_train_batches,
-        y_train_batches,
-        number_epochs=10, 
+        get_next_batch_fn,
+        number_batches=100,
+        number_epochs=2, 
         learning_rate=5e-4):
     # devices.print_memory("Forward:")
     # devices.print_memory("Backward:")
     # devices.print_memory("Model Backward:")
-
     context = {"optimizer": optimizer.RMSProp(lr=learning_rate)}
-    # context = {"optimizer": optimizer.Adam(lr=learning_rate)}
 
-    lr_decay = 1
     for epoch in range(number_epochs):
         avg_batch_err = 0
-        context["optimizer"].iteration = 1
-        context["optimizer"].learning_rate = (1 / (1 + lr_decay * epoch)) * learning_rate
+        context["optimizer"].batch_start(epoch=epoch)
         print("Learning Rate: {}".format(context["optimizer"].learning_rate))
 
-        for batch_num, ((x, x_mask), (y, y_mask)) in enumerate(zip(x_train_batches, y_train_batches)):
+        for batch_num in range(number_batches):
+            x, y = get_next_batch_fn()
+            x, y = ag.Tensor(x), ag.Tensor(y)
 
             start = timeit.default_timer()
-            pred = model.forward(x, x_mask=x_mask)
+            pred = model.forward(x)
             loss = model.loss(pred, y)
             loss.backward()
             model.backward(context)
             end = timeit.default_timer()
-            context["optimizer"].iteration += 1
+
+            context["optimizer"].batch_step()
 
             avg_batch_err += float(loss.value())
             time_taken = end - start
-            print("Batch Number {:3d}: error {}, time taken: {:.4f}".format(batch_num, loss.value(), time_taken))
-        avg_batch_err /= len(x_train_batches)
+            if batch_num % (number_batches // 10) == 0:
+                print("Batch Number {:3d}: error {}, time taken: {:.4f}".format(batch_num, loss.value(), time_taken))
+            
 
+        model.checkpoint(f"checkpoint_{epoch}.npy")
+        avg_batch_err /= number_batches
+        context["optimizer"].batch_end()
         print(f"Epoch {epoch+1}/{number_epochs} - Average Batch Error: {avg_batch_err}")
 
+    timestr = time.strftime("%Y%m%d")
+    model.checkpoint(f"checkpoint_{timestr}.npy")
+
+
+def generate_text(model, tok, num_tokens, seed=""):
+    x = tok.encode(seed).reshape(1, -1)
+    x = ag.Tensor(x)
+    y = model.generate(x, num_tokens).numpy()
+    generated = "".join(tok.decode(y[0]))
+    return generated
+                         
+
 def main():
-    xp.random.seed(0)
-    dl = ShakespeareDataLoader("data/shakespeare.txt")
-    dl.load_data()
+    np.random.seed(1337)
+    cp.random.seed(1337)
+    xp.random.seed(1337)
+
+    seq_len = 8
+    embed_dims = 32
+    batch_size = 32
+
+    dl = ShakespeareDataLoader("data/shakespeare.txt").load_data()
     tok = tokenizer.Tokenizer(dl.vocab)
 
-    seq_len = 128
-    embed_dims = 256
-    batch_size = 64
+    encoded_train = tok.encode(dl.train)
+    # encoded_valid = tok.encode(dl.valid)
     model = CharGPT(
         seq_len, 
         len(tok.vocab), 
         embed_dims=embed_dims,
-        decoder_layers=2,
+        decoder_layers=3,
         attention_heads=8
     )
+    # model.load_checkpoint("checkpoint_20250413.npy")
 
-    x_train_batches = tokenizer.get_batches(dl.x_train, seq_len-1, batch_size)
-    y_train_batches = tokenizer.get_batches(dl.y_train, seq_len-1, batch_size)
-    x_train_batches = [
-        tokenizer.convert_batches_to_numpy_with_mask(b1, tok, seq_len)
-        for b1 in x_train_batches
-    ]
-    y_train_batches = [
-        tokenizer.convert_batches_to_numpy_with_mask(b1, tok, seq_len)
-        for b1 in y_train_batches
-    ]
-    x_train_batches = [(ag.Tensor(x), ag.Tensor(x_mask)) for x, x_mask in x_train_batches]
-    y_train_batches = [(ag.Tensor(y), ag.Tensor(y_mask)) for y, y_mask in y_train_batches]
+    train(
+        model,
+        lambda: tokenizer.get_batch(encoded_train, seq_len, batch_size),
+        number_batches=1000,
+        number_epochs=10,
+        learning_rate=1e-3
+    )
+    print(generate_text(model, tok, 500, seed="LUCIUS:\nHe said"))
 
-    total_batches_bytes = 0
-    for b1, b1_mask in x_train_batches:
-        total_batches_bytes += b1.value().nbytes + b1_mask.value().nbytes
-    for b1, b1_mask in y_train_batches:
-        total_batches_bytes += b1.value().nbytes + b1_mask.value().nbytes
-
-    print("Model Bytes: {:.2f} MB".format(model.total_bytes() / (1024*1024)))
-    print("Total Batches Bytes: {:.2f} MB".format(total_batches_bytes / (1024*1024)))
-    train(model, x_train_batches, y_train_batches)
-
-    # y = model.forward(ag.Tensor(b1), ag.Tensor(b1_mask))
-    # y.backward()
-    # print(y.shape)
-    # ag.render_graphviz(y)
 if __name__ == "__main__":
     main()
     

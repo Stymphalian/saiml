@@ -14,9 +14,8 @@ class TestTokenizer(unittest.TestCase):
     def test_tokenizer(self):
         line = "abd"
         x = self.tok.encode(line)
-        self.assertEqual(x.shape, (3, len(self.tok.vocab))) 
         y = self.tok.decode(x)
-        self.assertEqual(y, list(line))   
+        self.assertEqual(y, line)
 
     def test_pad_line(self):
         line = "abd"
@@ -61,20 +60,20 @@ class TestTokenizer(unittest.TestCase):
     def test_get_batches(self):
         seq_len = 6
         batch_size = 3
-        lines = list("abcabcabccdeabcdeabd")
-        batches = list(tokenizer.get_batches(lines, seq_len, batch_size))
-        wants = [
-            ['abcabc', 'abccde', 'abcdea'],
-            ['bd'],
-        ]
-        for got, want in zip(batches, wants):
-            self.assertEqual(got, want)
+        line = "abcabcabccdeabcdeabd"
+        text = self.tok.encode(line)
+        x, y = tokenizer.get_batch(text, seq_len, batch_size)
+        self.assertTrue(x.shape == y.shape)
+        self.assertEqual(x.shape, (3,6))
+        self.assertEqual(y.shape, (3,6))
+        self.assertTrue(np.array_equal(x[0][1:], y[0][:-1]))
+        self.assertTrue(np.array_equal(x[1][1:], y[1][:-1]))
 
-    def test_convert_batches_to_numpy_with_mask(self):
-        batch = ["abcd", "bcda", "abc", "a", ""]
-        batch = [list(line) for line in batch]
-        seq_len = 6
-        tokenizer.convert_batches_to_numpy_with_mask(batch, self.tok, seq_len)
+    # def test_convert_batches_to_numpy_with_mask(self):
+    #     batch = ["abcd", "bcda", "abc", "a", ""]
+    #     batch = [list(line) for line in batch]
+    #     seq_len = 6
+    #     tokenizer.convert_batches_to_numpy_with_mask(batch, self.tok, seq_len)
 
 if __name__ == '__main__':
     unittest.main()

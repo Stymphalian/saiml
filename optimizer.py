@@ -3,6 +3,12 @@ import autograd2 as ag
 class Optimizer:
     def step(self, param: ag.Tensor,  grad: ag.Tensor):
         raise NotImplementedError()
+    def batch_start(self, **kwargs):
+        pass
+    def batch_step(self, **kwargs):
+        pass
+    def batch_end(self, **kwargs):
+        pass
     
 class SGD(Optimizer):
     def __init__(self, lr=0.5):
@@ -56,7 +62,6 @@ class RMSProp(Optimizer):
 
         self.prev_grads[param.id] = Vt.detach()
         return new_param
-        
 
 class Adam(Optimizer):
     def __init__(self, lr=5e-4, momentum=0.9, decay=0.999):
@@ -66,6 +71,7 @@ class Adam(Optimizer):
         self.prev_velocity = {}
         self.prev_decay = {}
         self.iteration = 0
+        self.lr_decay = 1
 
     def step(self, param: ag.Tensor, grad: ag.Tensor):
         assert isinstance(param, ag.Tensor)
@@ -91,3 +97,12 @@ class Adam(Optimizer):
         self.prev_velocity[param.id] = velocity.detach()
         self.prev_decay[param.id] = decay.detach()
         return new_param
+    
+    def batch_start(self, **kwargs):
+        epoch = kwargs["epoch"]
+        self.learning_rate = (1 / (1 + self.lr_decay * epoch)) * self.learning_rate
+        self.iteration = 1
+
+    def batch_step(self, **kwargs):
+        self.iteration += 1
+    

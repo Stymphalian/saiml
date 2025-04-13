@@ -1,5 +1,7 @@
 import autograd2 as ag
 from devices import xp
+import numpy
+from pathlib import Path
 from typing import *
 
 def _unpack_params(value: object) -> List[ag.Tensor]:
@@ -71,6 +73,18 @@ class Module:
             elif isinstance(param, Module):
                 total += param.total_bytes()
         return total
+    
+    def checkpoint(self, filename):
+        filepath = Path(filename)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        params = self.get_params()
+        xp.save(filepath, params, allow_pickle=False)
+
+    def load_checkpoint(self, filename):
+        filepath = Path(filename)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        params = xp.load(filepath, allow_pickle=False)
+        self.set_params(params)
 
     def unpack_params(self):
         return _unpack_params(self.params)

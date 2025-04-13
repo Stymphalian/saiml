@@ -95,26 +95,12 @@ class FeedForward(Module):
         self.dense2 = Linear(inner_embed, output_embed)
         self.params = [self.dense1, self.dense2]
 
-        # self.w1 = ag.Tensor(np_normal((input_embed, output_embed)), requires_grad=True)
-        # self.b1 = ag.Tensor(np_normal((1, 1)), requires_grad=True)
-        # self.w1.set_name("FeedForward.w1")
-        # self.b1.set_name("FeedForward.b1")
-        # self.params = [self.w1, self.b1]
-
     def forward(self, x):
         assert x.ndim == 3
         y = self.dense1(x)
         y = ag.relu(y)
         y = self.dense2(y)
         return y
-        # # B == Batch
-        # # n == sequence length
-        # # i == input_emebedding_size
-        # # o == output_embedding_size (typically the same as input_embedding_size)
-        # z1 = ag.einsum("Bni,io->Bno", x, self.w1)
-        # z2 = z1 + self.b1
-        # z3 = ag.relu(z2)
-        # return z3
 
 class SimpleSelfAttention(Module):
 
@@ -353,14 +339,14 @@ class DecoderBlock(Module):
             seq_len,
             embed_dims,
             num_heads=8,
-            feedforward_dims=64,
-            include_encoder_attention=True
+            ff_dims=None,
+            include_encoder_attention=False
         ):
         super().__init__()
         self.seq_len = seq_len
         self.embed_dims = embed_dims
         self.num_heads = num_heads
-        self.feedforward_dims = feedforward_dims
+        self.feedforward_dims = ff_dims if ff_dims is not None else 4*embed_dims
         self.include_encoder_attention = include_encoder_attention
         self.mask = ag.Tensor(create_mask_of_future_positions(self.seq_len))
 
@@ -372,6 +358,7 @@ class DecoderBlock(Module):
             num_heads=num_heads,
             mask=self.mask
         )
+
         self.norm2 = None
         self.encoder_attention = None
         

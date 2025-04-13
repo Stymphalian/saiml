@@ -8,3 +8,5 @@ TODO.txt
 graphviz
 graphviz.svg
 graphviz.pdf
+checkpoints/
+*.npy

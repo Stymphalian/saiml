@@ -42,24 +42,19 @@ class Tokenizer:
     def strip(self, line):
         return [c for c in line if c not in self.extra]
     
-    def encode(self, line):
-        if isinstance(line[0], str):
-            line = self.to_index(line)
-        x = []
-        onehots = np.identity(self.vocab.size)
-        for ci in line:
-            # ci = self.char_to_index[c]
-            x.append(onehots[ci])
-        x = np.array(x)
-        return x
+    def to_onehot(self, x):
+        return np.eye(self.vocab_size)[x]
     
+    def encode(self, text):
+        if isinstance(text, str):
+            text = list(text)
+        indices = self.to_index(text)
+        return indices
+       
     def decode(self, x):
-        indices = np.argmax(x, axis=1)
-        line = []
-        for ci in indices:
-            c = self.index_to_char[ci]
-            line.append(c)
-        return line
+        line = [self.index_to_char[i] for i in x]
+        self.strip(line)
+        return "".join(line)
     
 
 def mask_out_future_positions(seq_len):
@@ -83,62 +78,39 @@ def mask_out_pad_positions(src, pad_index):
     #     mask = (src == pad_index)
     #     return mask
 
-def convert_batches_to_numpy_with_mask(batch, tokenizer:Tokenizer, seq_len):
-    assert isinstance(batch, list)
+# def encode_lines(lines, tokenizer:Tokenizer, seq_len):
+#     batches = [list(line) for line in lines]
+#     batches = [tokenizer.pad_line(line, seq_len) for line in batches]
+#     batches = [tokenizer.to_index(line) for line in batches]
+#     return np.array([tokenizer.encode(line) for line in batches])
 
-    batches = [list(line) for line in batch]
-    batches = [tokenizer.pad_line(line, seq_len) for line in batches]
-    batches = [tokenizer.to_index(line) for line in batches]
+# def decode_lines(lines, tokenizer:Tokenizer):
+#     return ["".join(tokenizer.decode(line)) for line in lines]
 
-    source_mask = mask_out_pad_positions(np.array(batches), tokenizer.PAD_INDEX)
-    source = np.array([tokenizer.encode(line) for line in batches])
+# def convert_batches_to_numpy_with_mask(batch, tokenizer:Tokenizer, seq_len):
+#     assert isinstance(batch, list)
 
-    assert source.ndim == 3
-    assert source.shape == (len(batch), seq_len, tokenizer.vocab_size)
-    # assert source_mask.shape == (len(batch), seq_len, seq_len)
-    # assert source_mask.shape == (len(batch), seq_len)
-    return source, source_mask
+#     batches = [list(line) for line in batch]
+#     batches = [tokenizer.pad_line(line, seq_len) for line in batches]
+#     batches = [tokenizer.to_index(line) for line in batches]
 
-def get_batches(lines, seq_len, batch_size):
-    # seq_len2 = seq_len - 1 # leave room for the EOS token
-    batch = []
-    last_line = ""
+#     source_mask = mask_out_pad_positions(np.array(batches), tokenizer.PAD_INDEX)
+#     source = np.array([tokenizer.encode(line) for line in batches])
 
-    for char in lines:
-        last_line += char
-        if len(last_line) >= seq_len:
-            batch.append(last_line)
-            last_line = ""
-        if len(batch) >= batch_size:
-            yield batch
-            batch = []
+#     assert source.ndim == 3
+#     assert source.shape == (len(batch), seq_len, tokenizer.vocab_size)
+#     # assert source_mask.shape == (len(batch), seq_len, seq_len)
+#     # assert source_mask.shape == (len(batch), seq_len)
+#     return source, source_mask
 
-    if len(last_line) > 0:
-        batch.append(last_line)
-    if len(batch) > 0:
-        yield batch
+def get_batch(text:np.ndarray, block_size, batch_size):
+    assert isinstance(text, np.ndarray)
+    assert text.ndim == 1
 
-
-    # batch = []
-    # last_line = ""
-    # for next_line in lines:
-    #     last_line += next_line
-
-    #     # split last_line into batches of seq_len
-    #     line_batch = []
-    #     while len(last_line) >= seq_len:
-    #         line_batch.append(last_line[:seq_len])
-    #         last_line = last_line[seq_len:]
-
-    #     for line in line_batch:
-    #         batch.append(list(line))
-
-    #         if len(batch) >= batch_size:
-    #             yield batch
-    #             batch = []
-
-    # if len(last_line) > 0:
-    #     batch.append(list(last_line))
-
-    # if len(batch) > 0:
-    #     yield batch
+    indices = np.random.randint(text.size - block_size, size=batch_size)
+    x = [text[i:i+block_size] for i in indices]
+    y = [text[i+1:i+1+block_size] for i in indices]
+    x = np.stack(x)
+    y = np.stack(y)
+    return x, y
+    

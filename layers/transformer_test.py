@@ -14,6 +14,8 @@ class TestTransformers(base_gradient_test.NumericalGradientTest):
 
         x1 = tokenizer.encode("abc")
         x2 = tokenizer.encode("def")
+        x1 = tokenizer.to_onehot(x1)
+        x2 = tokenizer.to_onehot(x2)
         x = ag.Parameter(xp.array([x1, x2]))
         
         layer = Embedding(tokenizer.vocab_size, embed_dims)

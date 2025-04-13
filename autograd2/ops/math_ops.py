@@ -521,7 +521,7 @@ class TensorBitwiseOr(Operator):
 #################################################
 
 class TensorTupleMake(Operator):
-    def compute(self, *inputs: Tuple[Tensor]) -> Union[xp_ndarray, Tuple[xp_ndarray]]:
+    def compute(self, *inputs: Tuple[Tensor]) -> Union[xp.ndarray, Tuple[xp.ndarray]]:
         assert len(inputs) > 0
         assert isinstance(inputs[0], Tensor)
         return tuple(inputs)
@@ -816,7 +816,7 @@ class TensorConcatenate(Operator):
     def __init__(self, axis=None):
         self.axis = axis
 
-    def compute(self, *inputs: Tuple[TensorTuple]) -> xp_ndarray:
+    def compute(self, *inputs: Tuple[TensorTuple]) -> xp.ndarray:
         a = [x.value() for x in inputs[0]]
         y = xp.concatenate(a, axis=self.axis)
         return y
