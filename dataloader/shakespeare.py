@@ -4,13 +4,14 @@ class ShakespeareDataLoader:
     def __init__(self, filepath):
         self.filepath = filepath
         self.lines = []
-        self.alphabet = set(
-            list("0123456789") + 
-            list("abcdefghijklmnopqrstuvwxyz") + 
-            list("abcdefghijklmnopqrstuvwxyz".upper()) +
-            list(".,!?'\";:-") +
-            list(" \t\n")
-        )
+        # self.alphabet = set(
+        #     list("0123456789") + 
+        #     list("abcdefghijklmnopqrstuvwxyz") + 
+        #     list("abcdefghijklmnopqrstuvwxyz".upper()) +
+        #     list(".,!?'\";:-") +
+        #     list(" \t\n")
+        # )
+        self.alphabet = set([])
         self.freq = defaultdict(int)
         self._num_chars = None
         self.x_train = None

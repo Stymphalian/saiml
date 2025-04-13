@@ -177,7 +177,7 @@ def main():
     cp.random.seed(1337)
     xp.random.seed(1337)
 
-    seq_len = 8
+    seq_len = 64
     embed_dims = 32
     batch_size = 32
 
@@ -194,6 +194,10 @@ def main():
         attention_heads=8
     )
     # model.load_checkpoint("checkpoint_20250413.npy")
+
+    # x, y = tokenizer.get_batch(encoded_train, seq_len, batch_size)
+    # for xi in x:
+    #     print(tok.decode(xi))
 
     train(
         model,
