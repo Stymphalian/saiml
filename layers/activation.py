@@ -15,7 +15,7 @@ class Softmax(Module):
 class BatchSoftmax(Module):
     def forward(self, x):
         # TODO: Why does ag.log_softmax return NaN
-        return ag.softmax(x, axis=(-1,))
+        return ag.softmax(x, axis=-1)
 
 class ReLU(Module):
     def forward(self, x):

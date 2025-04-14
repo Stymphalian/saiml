@@ -157,9 +157,7 @@ def sigmoid(x):
 def softplus(x):
     return ag.log(ag.exp(x) + 1.0)
 def softmax(x, axis=None):
-    # TODO: How to get max working again. It is too slow on cupy
-    # shiftx = x - ag.max(x, axis=axis, keepdims=True)
-    shiftx = x
+    shiftx = x - ag.max(x, axis=axis, keepdims=True)
     exps = ag.exp(shiftx)
     return exps / ag.summation(exps, axis=axis, keepdims=True)
 def log_softmax(x, axis=None):

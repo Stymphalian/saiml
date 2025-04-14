@@ -1,8 +1,8 @@
 import numpy 
-import cupy
+import cupy as cp
 from typing import *
 from ..base import Operator, Tensor, TensorTuple
-from devices import xp, xp_ndarray
+from devices import xp
 import devices
 
 
@@ -380,51 +380,193 @@ class TensorPower(Operator):
         assert (dx.shape == x.shape)
         return dx
     
-def argmax_axes(x: numpy.ndarray, axes, keepdims=True):
-    assert isinstance(x, numpy.ndarray)
 
-    # Handle axes with negative indexing
-    axes = [axis if axis >= 0 else x.ndim + axis for axis in axes]
+argmax_axes_kernel = cp.RawKernel(
+r"""
 
-    all_axes = set(list(range(x.ndim)))
-    rest_axes = tuple(sorted(set(all_axes) - set(axes)))
-    axes_shape = tuple([x.shape[axis] for axis in axes])
-    rest_axes_shape = tuple([x.shape[axis] for axis in rest_axes])
-    rest_axes_size = numpy.prod(rest_axes_shape)
-    dx_shape = [
-        x.shape[axis] if axis not in axes else 1
-        for axis in range(x.ndim)
-    ]
-     
-    # TODO: Find a way to do this in purely cupy
-    dx = numpy.zeros(dx_shape, dtype=numpy.int64)
-    for i in range(rest_axes_size):
-        rest_axes_coords = numpy.unravel_index(numpy.array(i), rest_axes_shape)
-        assert len(rest_axes_coords) == len(rest_axes)
+void unravel_index(int index, const int* shape, const int *dims, int ndim, int *out_coords) {
+    for (int i = ndim - 1; i >= 0; --i) {
+        int dim = dims[i];
+        out_coords[i] = index % shape[dim];
+        index /= shape[dim];
+    }
+}
 
-        indexing = [slice(None)]*x.ndim
-        for axis, coord in zip(rest_axes, rest_axes_coords):
-            indexing[axis] = coord
+int ravel_index(int *coords, const int* shape, const int ndim) {
+    int cumulative_shape[20];
+    int value = 1;
+    for (int i = ndim-1; i >= 0; i--) {
+        cumulative_shape[i] = value;
+        value *= shape[i];
+    }
 
-        # Find "local" coordinates of maximum (ie. within the "axes" shape)
-        max_index = numpy.argmax(x[tuple(indexing)])
-        coords = numpy.unravel_index(max_index, axes_shape)
-        
-        assert len(coords) == len(axes)
-        # Find the "true" index with respect to the full shape of x
-        for axis, coord in zip(axes, coords):
-            indexing[axis] = coord
-        true_index = numpy.ravel_multi_index(tuple(indexing), x.shape)
+    int index = 0;
+    for (int i = 0; i < ndim; i++) {
+        index += coords[i] * cumulative_shape[i];
+    }
+    return index;
+}
 
-        # Put the true_index into the correct location
-        for axis in axes:
-            indexing[axis] = 0
-        dx[tuple(indexing)] = true_index
+void merge_coords(
+    int* a, 
+    const int *a_axis,
+    const int a_ndim,
+    int* b, 
+    const int *b_axis,
+    const int b_ndim,
+    int* out,
+    const int out_ndim
+) {
+
+    int ai = 0;
+    int bi = 0;
+    for(int i = 0; i < out_ndim; i++) {
+        if (ai < a_ndim && i == a_axis[ai]){
+            out[i] = a[ai++];
+        } else if (bi < b_ndim) {
+            out[i] = b[bi++];
+        }
+    }
+}
+
+void print_coords(int* coords, const int* axis, int ndim) {
+    for(int i = 0; i < ndim; i++) {
+        if (axis == nullptr) {
+            printf("(%d:%d), ", i, coords[i]);
+        } else {
+            printf("(%d:%d), ", axis[i], coords[i]);
+        }
+
+    }
+    printf("\n");
+}
+
+extern "C" __global__
+void argmax_axes_kernel(
+    const double *x,
+    long long* output,
+    int flat_red,         int flat_rest,
+    const int* x_shape,   int n_x_shape,    
+    const int* axes,      int n_axes,       
+    const int* rest_axes, int n_rest_axes
+) {
+    int tId = blockDim.x * blockIdx.x + threadIdx.x;
+    if (tId >= flat_rest) {
+        return;
+    }
+    assert(n_x_shape <= 20);
+
+    int rest_coords[20];
+    int red_coords[20];
+    int full_coords[20];
+
+    // Get the coordinates for the rest axes given the current tId
+    unravel_index(tId, x_shape, rest_axes, n_rest_axes, rest_coords);
+
+    // Get the max
+    double max_val = 0;
+    int max_idx = -1;
+    for(int i = 0; i < flat_red; i++) {
+        unravel_index(i, x_shape, axes, n_axes, red_coords);
+        merge_coords(
+            rest_coords, rest_axes, n_rest_axes,
+            red_coords, axes, n_axes,
+            full_coords, n_x_shape
+        );
+
+        int idx = ravel_index(full_coords, x_shape, n_x_shape);
+        double val = x[idx];
+        if (max_idx == -1 || val > max_val) {
+            max_val = val;
+            max_idx = idx;    
+        }
+    }
+
+    output[tId] = max_idx;
+}                                                       
+""", "argmax_axes_kernel")
+def argmax_axes_vectorized_kernel(x: xp.ndarray, axes, keepdims=True):
+    assert isinstance(x, xp.ndarray)
+    axes = [a if a >= 0 else x.ndim + a for a in axes]
+    axes = sorted(axes)
+    all_axes = list(range(x.ndim))
+    rest_axes = [a for a in all_axes if a not in axes]
+    rest_shape = tuple(x.shape[a] for a in rest_axes)
+    red_shape = tuple(x.shape[a] for a in axes)
+    flat_rest = int(numpy.prod(rest_shape))
+    flat_red = int(numpy.prod(red_shape))
+    output = cp.zeros(rest_shape, dtype=cp.int64)
+
+    num_blocks = (flat_rest // 32) + 1
+    num_threads = (flat_rest // num_blocks) + 1
+    # print("Flat", flat_rest, "NumBlocks: ", num_blocks, " NumThreads: ", num_threads)
+    argmax_axes_kernel(
+        (num_blocks,), (num_threads,), 
+        (
+            x, output,
+            flat_red, flat_rest,
+            cp.array(x.shape, dtype=cp.int32), len(x.shape),
+            cp.array(axes, dtype=cp.int32), len(axes),
+            cp.array(rest_axes, dtype=cp.int32), len(rest_axes)
+        )
+    )
+
+    if keepdims:
+        keepdims_shape = [1 for _ in range(x.ndim)]
+        for axis in rest_axes:
+            keepdims_shape[axis] = x.shape[axis]
+        output = output.reshape(keepdims_shape)
+    return output
+
+def argmax_axes_vectorized(x: xp.ndarray, axes, keepdims=True):
+    assert isinstance(x, xp.ndarray)
+
+    axes = [a if a >= 0 else x.ndim + a for a in axes]
+    axes = sorted(axes)
+    all_axes = list(range(x.ndim))
+    rest_axes = [a for a in all_axes if a not in axes]
+
+    permuted_axes = rest_axes + axes
+    x_perm = x.transpose(permuted_axes)
+
+    rest_shape = tuple(x.shape[a] for a in rest_axes)
+    red_shape = tuple(x.shape[a] for a in axes)
+
+    flat_rest = int(xp.prod(xp.array(rest_shape)))
+    flat_red = int(xp.prod(xp.array(red_shape)))
+
+    x_reshaped = x_perm.reshape(flat_rest, flat_red)
+    local_argmax = xp.argmax(x_reshaped, axis=1)
+
+    if axes == all_axes[-len(axes):]:
+        # if the axes are the last "right" side dimensions, we can do an optimization
+        # for recovering the coordinates of the argmax
+        y1 = xp.arange(flat_rest)*flat_red + local_argmax
+        y1 = y1.reshape(rest_shape + (1,) * len(axes))
+        # y1 = y1.transpose(np.argsort(permuted_axes))
+        result = y1
+    else:
+        local_coords = xp.stack(xp.unravel_index(local_argmax, red_shape), axis=1)
+        rest_coords = xp.stack(xp.unravel_index(xp.arange(flat_rest), rest_shape), axis=1)
+        full_coords = []
+        rest_index = local_index = 0
+        for i in range(x.ndim):
+            if i in rest_axes:
+                full_coords.append(rest_coords[:, rest_index])
+                rest_index += 1
+            else:
+                full_coords.append(local_coords[:, local_index])
+                local_index += 1
+
+        full_coords = xp.stack(full_coords, axis=0)
+        flat_indices = xp.ravel_multi_index(full_coords, dims=x.shape)
+
+        out_shape = [x.shape[a] if a not in axes else 1 for a in range(x.ndim)]
+        result = flat_indices.reshape(rest_shape + (1,) * len(axes)).reshape(out_shape)
 
     if not keepdims:
-        # Remove the '1' dimensions in the dx shape (5,1,4) -> (5,4)
-        dx = numpy.squeeze(dx)
-    return dx
+        result = result.squeeze()
+    return result
         
 class TensorMax(Operator):
     def __init__(self, axis=None, keepdims=False):
@@ -442,7 +584,7 @@ class TensorMax(Operator):
             axis = self.axis
             if isinstance(self.axis, int):
                 axis = (self.axis,)
-            xi = argmax_axes(x.numpy(), axis, keepdims=True)
+            xi = argmax_axes_vectorized_kernel(x.value(), axis, keepdims=True)
             dx = xp.zeros(x.shape)
             xp.put(dx, xp.array(xi), 1)
 

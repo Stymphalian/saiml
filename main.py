@@ -133,6 +133,7 @@ def train(
 
     for epoch in range(number_epochs):
         avg_batch_err = 0
+        avg_batch_train_time = 0
         context["optimizer"].batch_start(epoch=epoch)
         print("Learning Rate: {}".format(context["optimizer"].learning_rate))
 
@@ -148,17 +149,19 @@ def train(
             end = timeit.default_timer()
 
             context["optimizer"].batch_step()
-
-            avg_batch_err += float(loss.value())
+            
             time_taken = end - start
+            avg_batch_err += float(loss.value())
+            avg_batch_train_time += time_taken
             if batch_num % (number_batches // 10) == 0:
                 print("Batch Number {:3d}: error {}, time taken: {:.4f}".format(batch_num, loss.value(), time_taken))
             
 
         model.checkpoint(f"checkpoint_{epoch}.npy")
         avg_batch_err /= number_batches
+        avg_batch_train_time /= number_batches
         context["optimizer"].batch_end()
-        print(f"Epoch {epoch+1}/{number_epochs} - Average Batch Error: {avg_batch_err}")
+        print(f"Epoch {epoch+1}/{number_epochs} - Average Batch Error: {avg_batch_err} - Time Taken/batch {avg_batch_train_time}")
 
     timestr = time.strftime("%Y%m%d")
     model.checkpoint(f"checkpoint_{timestr}.npy")
@@ -178,7 +181,7 @@ def main():
     xp.random.seed(1337)
 
     seq_len = 64
-    embed_dims = 32
+    embed_dims = 64
     batch_size = 32
 
     dl = ShakespeareDataLoader("data/shakespeare.txt").load_data()
@@ -206,7 +209,7 @@ def main():
         number_epochs=10,
         learning_rate=1e-3
     )
-    print(generate_text(model, tok, 500, seed="LUCIUS:\nHe said"))
+    # print(generate_text(model, tok, 500, seed="LUCIUS:\nHe said"))
 
 if __name__ == "__main__":
     main()
