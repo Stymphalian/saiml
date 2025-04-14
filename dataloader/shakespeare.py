@@ -14,6 +14,7 @@ class ShakespeareDataLoader:
         self.alphabet = set([])
         self.freq = defaultdict(int)
         self._num_chars = None
+        self.text = None
         self.x_train = None
         self.y_train = None
         self.x_test = None
