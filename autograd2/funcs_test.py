@@ -38,6 +38,12 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         y = ag.softmax(x)
         y.backward()
 
+    def test_softmax_forward(self):
+        xp.random.seed(1)
+        x = ag.Tensor(xp.random.rand(2, 10), requires_grad=True)
+        y = ag.softmax(x, axis=1)
+        self.assertTrue(xp.sum(y.value()[0]), xp.array(1.0))
+        self.assertTrue(xp.sum(y.value()[1]), xp.array(1.0))
 
     def test_softmax(self):
         xp.random.seed(1)

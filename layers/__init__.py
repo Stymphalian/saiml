@@ -6,3 +6,4 @@ from .sequence import *
 from .sampling import *
 from .norm import *
 from .transformer import *
+from .dropout import *

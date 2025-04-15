@@ -2,6 +2,8 @@ import numpy
 import autograd2 as ag
 from loss import *
 from .module import Module
+from .dense import Linear
+from .norm import LayerNorm2
 
 
 def np_normal(shape):
@@ -43,46 +45,6 @@ class PositionalEncoding(Module):
     def forward(self, x):
         # b,n,k = x.shape
         return ag.add(x, self.w)
-    
-class LayerNorm2(Module):
-    def __init__(self, features_shape, eps=1e-8):
-        self.features_shape = features_shape
-        self.w = ag.Tensor(xp.ones(features_shape), requires_grad=True)
-        self.b = ag.Tensor(xp.zeros(features_shape), requires_grad=True)
-        self.params = [self.w, self.b]
-        self.epsilon = ag.Tensor(eps)
-    
-    def forward(self, x):
-        index = x.ndim - len(self.features_shape)
-        reduced_shape = x.shape[:index] + (1,)*len(self.features_shape)
-        axes = tuple(range(index, x.ndim))
-
-        mean = ag.mean(x, axis=axes).reshape(reduced_shape)
-        u = x - mean
-        var = ag.mean(u*u, axis=axes)
-        stddev = ag.sqrt(var).reshape(reduced_shape)
-
-        z = u * self.w
-        z = z / (stddev + self.epsilon)
-        z = z + self.b
-        return z
-    
-
-class Linear(Module):
-    def __init__(self, input_embed, output_embed):
-        super().__init__()
-        self.input_embed = input_embed
-        self.output_embed = output_embed
-
-        total_size = input_embed * output_embed
-        w = xp.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
-        b = xp.random.normal(scale=(2.0/total_size), size=(1, 1))
-        self.w = ag.Tensor(w, requires_grad=True)
-        self.b = ag.Tensor(b, requires_grad=True)
-        self.params = [self.w, self.b]
-
-    def forward(self, x):
-        return ag.batch_matmul(x, self.w) + self.b
     
 class FeedForward(Module):
     def __init__(self, input_embed, inner_embed, output_embed):
