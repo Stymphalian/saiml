@@ -337,7 +337,41 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got.value()[1], want2))
         got.backward()
 
+    def test_inverse_dropout(self):
+        x1 = xp.arange(2*3, dtype=xp.float64).reshape(2,3) + 1
+        x = ag.Tensor(x1, requires_grad=True)
 
+        # In training, with dropout
+        got = ag.inverse_dropout(x, True, p=0.3, rng_seed=3)
+        want = xp.array([
+            [1.0, 0.0, 3.0],
+            [0.0, 5.0, 6.0]
+        ])
+        self.assertEqual(got.shape, want.shape)
+        self.assertTrue(xp.array_equal(got.value(), want))
+        got.backward()
+        want_dx = xp.array([
+            [1.0/0.3, 0.0    , 1.0/0.3],
+            [0.0    , 1.0/0.3, 1.0/0.3]
+        ])
+        self.assertEqual(x.grad.shape, want_dx.shape)
+        self.assertTrue(xp.array_equal(x.grad.value(), want_dx))
+
+        # In test time, no dropout should occur
+        got = ag.inverse_dropout(x, False, p=0.5, rng_seed=1)
+        want = xp.array([
+            [1.0, 2.0, 3.0],
+            [4.0, 5.0, 6.0]
+        ])
+        self.assertEqual(got.shape, want.shape)
+        self.assertTrue(xp.array_equal(got.value(), want))
+        got.backward()
+        want_dx = xp.array([
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0]
+        ])
+        self.assertEqual(x.grad.shape, want_dx.shape)
+        self.assertTrue(xp.array_equal(x.grad.value(), want_dx))
 
 if __name__ == '__main__':
     unittest.main()

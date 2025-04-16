@@ -6,14 +6,14 @@ from .dropout import *
 class TestDropout(unittest.TestCase):
     def test_dropout(self):
         xp.random.seed(0)
-        layer = Dropout(True, p=0.5)
+        layer = Dropout(True, p=0.5, rng_seed=3)
         x1 = xp.arange(2*3).reshape(2,3) + 1
         x = ag.Tensor(x1, requires_grad=True)
 
         got = layer.forward(x)
         want = xp.array([
-            [0, 2, 0],
-            [4, 0, 0]
+            [1, 0, 3],
+            [0, 5, 6]
         ])
         self.assertEqual(got.shape, want.shape)
         self.assertTrue(xp.array_equal(got.value(), want))

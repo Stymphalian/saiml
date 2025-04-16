@@ -15,13 +15,17 @@ Layer | Abstract interface class of a layer of the network. All children will su
 DenseLayer | Fully connected layer
 Conv2DLayer | Convolution layer supporting stride, padding, kernel_size and kernel_depth
 Pool2DLayer | Pooling layer supporting stride.
+Transformer | Basic encoder and decoder blocks of the transformer
 Loss | cross_entropy, mean_square_error
 PCA | Principle Component Analysis for dimension reduction and feature analysis. Unoptimized and directly computes the eigen values/vectors from the covariance matrix.
-autograd | implement autograd tensors
+autograd | implement autograd tensors (pytorch like api)
+GPU | Run all the calculation on GPU (uses cupy)
+Optimizer | A general class for running an optimizer for gradient descent (SGD, RMSProp, Adam)
 
 ## TODO
 Feature  | Description
 ---|---
-Optimizer | A general class for running an optimizer for gradient descent.
 Trainer | A class for running the training loop
-GPU | Run all the calculation on GPU
+Diffusion | Basics of diffusion image generation
+RNN/LSTM | Basic sequence generation.
+Regularization | regularization l1,l2, etc

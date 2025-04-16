@@ -5,6 +5,7 @@ from typing import *
 from utils import conv
 from .base import Operator, Tensor
 import autograd2 as ag
+from devices import xp
 
 
 class TensorConvolve2D(Operator):
@@ -128,6 +129,40 @@ class TensorMaxPool(Operator):
         dy = outGrad.value()
         dx = conv.max_pool2d_gradient(x, self.kernel_size, dy, self.stride, self.padding)
         return Tensor(dx)
+    
+class TensorInverseDropout(Operator):
+    def __init__(self, is_training, p=0.5, rng_seed=None):
+        self.is_training = is_training
+        self.p = p
+        self.rng_seed = rng_seed
+        self.rng = xp.random.default_rng(rng_seed)
+
+        # TODO: This is probably gonna be a source of a bug, because it makes
+        # this operator stateful.
+        self.last_rand = None
+    
+    def compute(self, *inputs: Tuple[Tensor]):
+        x = inputs[0].value()
+        if self.is_training:
+            self.last_rand = self.rng.binomial(1, self.p, size=x.shape)
+            y = x * self.last_rand
+            return y
+        else:
+            return x
+        
+    def gradients(self, node, outGrad):
+        x = node.inputs[0]
+        if self.is_training:
+            # scale the gradient by the inverse of the probability
+            # This is so that we can avoid doing this during test time
+            dx = outGrad * ag.Tensor(self.last_rand)
+            dx = dx / self.p
+
+            assert dx.shape == x.shape
+            return dx
+        else:
+            assert outGrad.shape == x.shape
+            return outGrad
 
 # from loss import (
 #     softmax_internal,
@@ -247,3 +282,6 @@ def mask_fill(x, mask, value):
 
     z = ag.where(mask, ag.Tensor(value_mask), x)
     return z
+
+def inverse_dropout(x, is_training, p=0.5, rng_seed=None):
+    return TensorInverseDropout(is_training, p, rng_seed).tensor(x)

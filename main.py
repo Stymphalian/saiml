@@ -98,7 +98,6 @@ def main():
     x_test, y_test = preprocess_data(x_test, y_test)
 
     model = SimpleMnist(10, is_training=False)
-    model.load_checkpoint("checkpoints/checkpoint_20250415.npy")
     # trainer.train(
     #     model,
     #     trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=2000),
@@ -106,6 +105,7 @@ def main():
     #     learning_rate=5e-5
     # )
 
+    model.load_checkpoint("checkpoints/checkpoint_20250415.npy")
     # Evaluate the test set and visualize the worse performing cases
     y_pred = model(ag.Tensor(x_test))
     y_arg = xp.argmax(y_pred.value(), axis=1)
