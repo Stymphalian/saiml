@@ -1,6 +1,7 @@
 import os
 import timeit
 import time
+import math
 from typing import *
 from pprint import pprint
 
@@ -27,55 +28,130 @@ def preprocess_data(x, y, limit=None):
         return x[:limit], y[:limit]
     else:
         return x, y
-
-class SimpleMnist(Module):
-    def __init__(self, num_digits=10, is_training=False):
+    
+class GANDiscriminator(Module):
+    def __init__(self, input_size=784,is_training=False):
         super().__init__()
-        self.num_digits = num_digits
+        self.input_size = input_size
 
         self.blocks = Sequence([
-            Linear(784, 1024),
+            Linear(input_size, input_size),
             Dropout(is_training),
             ReLU(),
-            LayerNorm2((1024,)),
+            LayerNorm2((input_size,)),
 
-            Linear(1024, 1024),
+            Linear(input_size, input_size//2),
             Dropout(is_training),
             ReLU(),
-            LayerNorm2((1024,)),
+            LayerNorm2((input_size//2,)),
 
-            Linear(1024, 256),
+            Linear(input_size//2, input_size//4),
             Dropout(is_training),
             ReLU(),
-            LayerNorm2((256,)),
+            LayerNorm2((input_size//4,)),
         ])
         self.logits = Sequence([
-            Linear(256, self.num_digits),
+            Linear(input_size//4, 2),
             BatchSoftmax()
         ])
-
-        self.params = [
-            self.blocks,
-            self.logits
-        ]
-
-    def onehot_encode(self, x, pad_index=0):
-        eye = xp.eye(self.num_digits)
-        y = eye[x.value()]
-        return ag.Tensor(y)
+        self.params = [self.blocks, self.logits]
 
     def forward(self, x):
         b, n = x.shape               # (b,784)
         y = self.blocks.forward(x)   # (b,256)
-        y = self.logits.forward(y)   # (b,10)
+        y = self.logits.forward(y)   # (b,2)
         return y
     
-    def loss(self, y_pred, y_true):
-        b, n = y_pred.shape                          # (b,10)
-        y_true = self.onehot_encode(y_true)          # (b,10)
-        loss = ag.cross_entropy_loss(y_pred, y_true, axis=(1,))
-        loss = ag.mean(loss)
-        return loss    
+class GANGenerator(Sequence):
+    def __init__(self, input_size=128, output_size=784, is_training=False):
+        self.input_size = input_size
+        self.output_size = output_size
+        super().__init__([
+            Linear(input_size, input_size*2),
+            ReLU(),
+            Dropout(is_training),
+            LayerNorm2((input_size*2,)),
+
+            Linear(input_size*2, output_size//2),
+            ReLU(),
+            Dropout(is_training),
+            LayerNorm2((output_size//2,)),
+
+            Linear(output_size//2, output_size),
+            ReLU(),
+            Dropout(is_training),
+            LayerNorm2((output_size,)),
+
+            Linear(output_size, output_size),
+            ReLU(),
+        ])
+
+
+def ag_onehot(x, num_classes=10):
+    eye = xp.eye(num_classes)
+    y = eye[x.value()]
+    y = ag.Tensor(y)
+    return y
+
+class GANMnist(Module):
+    def __init__(self, input_size=128, image_size=784, is_training=False):
+        super().__init__()
+        self.input_size = input_size
+        self.image_size = image_size
+        self.desc = GANDiscriminator(image_size, is_training)
+        self.gen = GANGenerator(input_size, image_size, is_training)
+        self.params = [self.desc, self.gen]
+
+    def forward(self, x):
+        b, n = x.shape
+        random_latents = ag.random((b, self.input_size))
+
+        gen = self.gen.forward(random_latents)    # (b,784)
+        pred_gen = self.desc.forward(gen)         # (b,2)
+        pred_true = self.desc.forward(x)          # (b,2)
+        return pred_gen, pred_true
+    
+    def descriminate(self, x):
+        b, n = x.shape
+        random_latents = ag.random((b, self.input_size))
+
+        gen = self.gen.forward(random_latents)    # (b,784)
+        pred_gen = self.desc.forward(gen)         # (b,2)
+        pred_true = self.desc.forward(x)          # (b,2)
+        return pred_gen, pred_true
+
+    def generate(self, b):
+        random_latents = ag.random((b, self.input_size))
+        gen = self.gen.forward(random_latents)    # (b,784)
+        pred_gen = self.desc.forward(gen)         # (b,2)
+        return pred_gen
+    
+    def descriminate_loss(self, preds):
+        pred_gen, pred_true = preds
+        b, n = pred_gen.shape                           # (b,2)
+        b, n = pred_true.shape                          # (b,2)
+
+        # calculate the loss
+        onehot_one = ag_onehot(ag.zeros((b,), dtype=xp.int32), 2)
+        onehot_zero = ag_onehot(ag.ones((b,), dtype=xp.int32), 2)
+        desc_loss1 = ag.cross_entropy_loss(pred_gen, onehot_one, axis=(1,))
+        desc_loss2 =  ag.cross_entropy_loss(pred_gen, onehot_zero, axis=(1,))
+        desc_loss = desc_loss1 + desc_loss2
+        desc_loss = ag.mean(desc_loss)
+
+        return desc_loss
+    
+    def generator_loss(self, pred):
+        b, n = pred.shape
+        onehot_one = ag_onehot(ag.ones((b,), dtype=xp.int32), 2)
+        gen_loss = ag.cross_entropy_loss(pred, onehot_one, axis=(1,))
+        gen_loss = ag.mean(gen_loss)
+        gen_loss = -gen_loss
+        return gen_loss
+
+    
+def random_images(num_batches):
+    return xp.random.rand(num_batches, 784, dtype=xp.float64)
 
 def main():
     np.random.seed(1337)
@@ -97,36 +173,28 @@ def main():
     x_train, y_train = preprocess_data(x_train, y_train)
     x_test, y_test = preprocess_data(x_test, y_test)
 
-    model = SimpleMnist(10, is_training=False)
-    # trainer.train(
-    #     model,
-    #     trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=2000),
-    #     number_epochs=10,
-    #     learning_rate=5e-5
-    # )
+    # model = GANMnist(is_training=True)
+    image_size=784
+    latent_size=128
+    # desc = GANDiscriminator(image_size, is_training=True)
+    # gen = GANGenerator(latent_size, image_size, is_training=True)
+    # # pred = desc.forward(ag.Tensor(x_train))
+    # image = gen.forward(ag.random((1,latent_size)))
+    # plt.imshow(image.value()[0].get().reshape(28,28), cmap='gray')
+    # plt.show()
 
-    model.load_checkpoint("checkpoints/checkpoint_20250415.npy")
-    # Evaluate the test set and visualize the worse performing cases
-    y_pred = model(ag.Tensor(x_test))
-    y_arg = xp.argmax(y_pred.value(), axis=1)
-    y_true_onehot = model.onehot_encode(ag.Tensor(y_test))
-    loss = ag.cross_entropy_loss(y_pred, y_true_onehot, axis=(1,))
-
-    count = 0 
-    indices = []
-    for ix, (true, pred) in enumerate(zip(y_test, y_arg)):
-        if true != pred:
-            count += 1
-            indices.append((loss[ix].value().get(), ix))
-    print("Test Error Rate: ", count / x_test.shape[0])
-    sorted_indices = sorted(indices, reverse=True)
-    indices = [s[1] for s in sorted_indices]
-
-    fig, axes = plt.subplots(5, 20, figsize=(15, 6))
-    for i, ax in enumerate(axes.flatten()):
-        ax.set_title(f"{y_arg[indices][i]}")
-        ax.imshow(xp.asnumpy(x_test[indices][i]).reshape(28, 28), cmap='gray')
-    plt.show(block=True)
+    model = GANMnist(latent_size, image_size, is_training=True)
+    trainer.train_gan(
+        model,
+        trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=10),
+        num_iters=1000,
+        descrimiator_iters=1,
+        generator_iters=1,
+        minibatch_size=50,
+        learning_rate=5e-5
+    )
+    # model.load_checkpoint("checkpoints/checkpoint_20250415.npy")
+   
 
 if __name__ == "__main__":
     main()

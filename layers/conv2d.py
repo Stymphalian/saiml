@@ -54,7 +54,7 @@ class Conv2dTranspose(Module):
         self.params = self.W + self.b
 
     def forward(self, x):
-        assert x.shape == self.input_shape
+        assert x.shape[1:] == self.input_shape
 
         output = []
         for k in range(self.num_kernels):

@@ -201,8 +201,8 @@ def log_softmax(x, axis=None):
     z = ag.log(z)
     y = x - z
     return y
-def relu(x):
-    return (x + ag.norm(x)) / 2.0
+def relu(x, axis=None, keepdims=True):
+    return (x + ag.norm(x, axis=axis, keepdims=keepdims)) / 2.0
 def max_pool2d(x, kernel_size, stride=1, padding=0):
     return TensorMaxPool(kernel_size, stride, padding).tensor(x)
 def variance(x, axis=None, mean=None):

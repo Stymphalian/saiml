@@ -19,4 +19,4 @@ class BatchSoftmax(Module):
 
 class ReLU(Module):
     def forward(self, x):
-        return ag.relu(x)
+        return ag.relu(x, axis=-1)

@@ -52,6 +52,59 @@ def train(
 
     timestr = time.strftime("%Y%m%d")
     model.checkpoint(f"checkpoints/checkpoint_{timestr}.npy")
+
+
+def train_gan(
+        model: Module,
+        batcher,
+        num_iters=100,
+        descrimiator_iters=1,
+        generator_iters=1,
+        minibatch_size=10,
+        learning_rate=5e-4):
+    # devices.print_memory("Forward:")
+    # devices.print_memory("Backward:")
+    # devices.print_memory("Model Backward:")
+    context = {"optimizer": optimizer.RMSProp(lr=learning_rate)}
+    print("Learning Rate: {}".format(context["optimizer"].learning_rate))
+
+
+    for iter in range(num_iters):
+        
+        # Run descriminator
+        desc_start = timeit.default_timer()
+        desc_loss_avg = 0
+        for batch_num in range(descrimiator_iters):
+            x, _ = batcher.sample(minibatch_size)
+            x = ag.Parameter(x)
+            preds = model.descriminate(x)
+            loss = model.descriminate_loss(preds)
+            loss.backward()
+            model.desc.backward(context)
+
+            desc_loss_avg += float(loss.value())
+        desc_loss_avg /= descrimiator_iters
+        desc_end = timeit.default_timer()
+        
+        
+        # Run descriminator
+        gen_start = timeit.default_timer()
+        gen_loss_avg = 0
+        for batch_num in range(generator_iters):
+            preds = model.generate(minibatch_size)
+            loss = model.generator_loss(preds)
+            loss.backward()
+            model.gen.backward(context)
+            gen_loss_avg += float(loss.value())
+
+        gen_loss_avg /= generator_iters
+        gen_end = timeit.default_timer()
+
+        if iter % (num_iters//50) == 0:
+            print(f"[{iter}] D_err: {desc_loss_avg:.4f}, G_err: {gen_loss_avg:.4f} - time: {desc_end - desc_start:.4f}, {gen_end - gen_start:.4f}")
+            
+    timestr = time.strftime("%Y%m%d")
+    model.checkpoint(f"checkpoints/checkpoint_{timestr}.npy")
                          
 
 class BatchLoader:
@@ -99,6 +152,10 @@ class BatchLoader:
 
     def __call__(self, *args, **kwargs):
         return self.next(*args, **kwargs)
+    
+    def sample(self, num_samples):
+        x_choice = xp.random.choice(self.x.shape[0], num_samples, replace=False)
+        return self.x[x_choice], self.y[x_choice]
 
     def next(self):
         return zip(self.x_split, self.y_split)

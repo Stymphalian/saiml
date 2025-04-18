@@ -603,15 +603,16 @@ class TensorNegate(Operator):
         return -outGrad
         
 class TensorNorm(Operator):
-    def __init__(self, axis=None):
+    def __init__(self, axis=None, keepdims=False):
         self.axis = axis
+        self.keepdims = keepdims
     def compute(self, *inputs: Tuple[Tensor]):
-        return xp.linalg.norm(inputs[0].value(), axis=self.axis)
+        return xp.linalg.norm(inputs[0].value(), axis=self.axis, keepdims=self.keepdims)
     def gradients(self, node, outGrad):
         x = node.inputs[0]
         outGradShape, _ = get_broadcast_shape(x, self.axis)
         outGrad = outGrad.reshape(outGradShape)
-        dx = outGrad * x / norm(x, axis=self.axis)
+        dx = outGrad * x / norm(x, axis=self.axis, keepdims=True)
         assert dx.shape == x.shape
         return dx
     
@@ -1042,8 +1043,8 @@ def max(a, axis=None, keepdims=False):
     return TensorMax(axis=axis, keepdims=keepdims).tensor(a)
 def neg(a):
     return TensorNegate().tensor(a)
-def norm(a, axis=None):
-    return TensorNorm(axis=axis).tensor(a)
+def norm(a, axis=None, keepdims=False):
+    return TensorNorm(axis=axis, keepdims=keepdims).tensor(a)
 def sqrt(a):
     return TensorSqrt().tensor(a)
 def where(mask, a, b):

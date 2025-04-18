@@ -578,18 +578,20 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         xp.random.seed(1)
         x1 = ag.Tensor(xp.random.rand(2,3,4), requires_grad=True)
         for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
-            got = ag.norm(x1, axis=axis)
-            want = xp.linalg.norm(x1.value(), axis=axis)
-            self.assertTrue(xp.array_equal(got.value(), want))
+            for keepdims in [True, False]:
+                got = ag.norm(x1, axis=axis, keepdims=)
+                want = xp.linalg.norm(x1.value(), axis=axis, keepdims=keepdims)
+                self.assertTrue(xp.array_equal(got.value(), want))
 
     def test_norm_backward(self):
         xp.random.seed(1)
         for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
-            x1 = ag.Tensor(xp.random.rand(2,3,4), requires_grad=True)
-            def forward(params):
-                self.unravel_params(params, x1)
-                return ag.norm(x1)
-            self.numeric_check(forward, x1)
+            for keepdims in [True, False]:
+                x1 = ag.Tensor(xp.random.rand(2,3,4), requires_grad=True)
+                def forward(params):
+                    self.unravel_params(params, x1)
+                    return ag.norm(x1, axis=axis, keepdims=keepdims)
+                self.numeric_check(forward, x1)
 
     def test_sqrt(self):
         x1 = ag.Tensor(xp.arange(9).reshape(3,3)+1, requires_grad=True)
