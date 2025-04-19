@@ -7,7 +7,7 @@ from .norm import LayerNorm2
 
 
 def np_normal(shape):
-    return xp.random.normal(scale=(2.0/numpy.prod(shape)), size=shape)
+    return xp.random.normal(scale=numpy.sqrt(2.0/numpy.prod(shape)), size=shape)
 
 class Embedding(Module):
     def __init__(self, vocab_size, embed_dims):

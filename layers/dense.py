@@ -1,5 +1,5 @@
+import math
 import autograd2 as ag
-# import numpy as np
 from devices import xp
 from . import Module
 
@@ -26,8 +26,8 @@ class Linear(Module):
         self.output_embed = output_embed
 
         total_size = input_embed * output_embed
-        w = xp.random.normal(scale=(2.0/total_size), size=(input_embed, output_embed))
-        b = xp.random.normal(scale=(2.0/total_size), size=(1, 1))
+        w = xp.random.normal(scale=math.sqrt(2.0/input_embed), size=(input_embed, output_embed))
+        b = xp.random.normal(scale=math.sqrt(2.0/input_embed), size=(1, 1))
         self.w = ag.Tensor(w, requires_grad=True)
         self.b = ag.Tensor(b, requires_grad=True)
         self.params = [self.w, self.b]

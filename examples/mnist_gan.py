@@ -211,6 +211,8 @@ def main():
     for i, ax in enumerate(axes.flatten()):
         ax.imshow(y[i].value().get().reshape(28,28), cmap='gray')
     plt.show(block=True)
+
+
    
 
 if __name__ == "__main__":
