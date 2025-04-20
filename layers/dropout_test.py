@@ -11,10 +11,16 @@ class TestDropout(unittest.TestCase):
         x = ag.Tensor(x1, requires_grad=True)
 
         got = layer.forward(x)
-        want = xp.array([
-            [1, 0, 3],
-            [0, 5, 6]
-        ])
+        if xp.__name__ == 'cupy':
+            want = xp.array([
+                [1, 0, 3],
+                [0, 5, 6]
+            ])
+        else:
+            want = xp.array([
+                [0, 0, 3],
+                [4, 0, 0]
+            ])
         self.assertEqual(got.shape, want.shape)
         self.assertTrue(xp.array_equal(got.value(), want))
         got.backward()

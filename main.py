@@ -15,6 +15,7 @@ from devices import xp
 from matplotlib import pyplot as plt
 import optimizer
 import trainer
+import utils
 
 def preprocess_data(x, y, limit=None):
     # reshape and normalize input data
@@ -31,35 +32,43 @@ def preprocess_data(x, y, limit=None):
         return x, y
     
 class GANDiscriminator(Module):
-    def __init__(self, input_size=784,is_training=False):
+    def __init__(self, input_size=784, is_training=False):
         super().__init__()
         self.input_size = input_size
+        self.img_size = math.sqrt(input_size)  # 1, 28,28
 
         self.blocks = Sequence([
-            Linear(input_size, input_size),
-            Dropout(is_training),
+            Reshape((-1, 1, 28, 28)),
+            Conv2d((1, 28, 28), num_kernels=16, kernel_size=5, stride=1, padding=0),
             ReLU(),
-            LayerNorm2((input_size,)),
+            LayerNorm2((16, 24, 24)),
 
-            Linear(input_size, input_size//2),
-            Dropout(is_training),
+            Conv2d((16, 24, 24), num_kernels=32, kernel_size=5, stride=1, padding=0),
             ReLU(),
-            LayerNorm2((input_size//2,)),
+            LayerNorm2((32, 20, 20)),
 
-            Linear(input_size//2, input_size//4),
-            Dropout(is_training),
+            Conv2d((32, 20, 20), num_kernels=64, kernel_size=5, stride=2, padding=0),
             ReLU(),
-            LayerNorm2((input_size//4,)),
+            LayerNorm2((64, 8, 8)),
+
+            Conv2d((64, 8, 8), num_kernels=128, kernel_size=6, stride=1, padding=0),
+            ReLU(),
+            LayerNorm2((128, 3, 3)),
+
+            Conv2d((128, 3, 3), num_kernels=256, kernel_size=3, stride=1, padding=0),
+            ReLU(),
+            LayerNorm2((256, 1, 1)),
         ])
         self.logits = Sequence([
-            Linear(input_size//4, 2),
+            Reshape((-1, 256)),
+            Linear(256, 2),
             BatchSoftmax()
         ])
         self.params = [self.blocks, self.logits]
 
     def forward(self, x):
         b, n = x.shape               # (b,784)
-        y = self.blocks.forward(x)   # (b,256)
+        y = self.blocks.forward(x)   # (b,64)
         y = self.logits.forward(y)   # (b,2)
         return y
     
@@ -164,6 +173,25 @@ def train_gan(
     model.checkpoint(f"checkpoints/checkpoint_{timestr}.npy")
 
 
+def test_conv_seq():
+    utils.conv_utils.validate_conv2d_sequence([
+        ((1, 28, 28), (16, 5, 5), 1, 0),
+        ((16, 24, 24), (32, 5, 5), 1, 0),
+        ((32, 20, 20), (64, 5, 5), 2, 0),
+        ((64, 8, 8), (128, 6, 6), 1, 0),
+        ((128, 3, 3), (256, 3, 3), 1, 0),
+        # ((256, 1, 1), _, _, _),
+    ])
+    print("transpose")
+    utils.conv_utils.validate_conv2d_transpose_sequence([
+        ((256, 1, 1), (128, 3, 3), 1, 0),
+        ((128, 3,3), (64, 6, 6), 1, 0),
+        ((64,8,8), (32, 5, 5), 2, 0),
+        ((32, 20, 20), (16, 5, 5), 1, 0),
+        ((16, 24, 24), (1, 5, 5), 1, 0),   
+        # ((1, 28, 28), _, _, _)
+    ])
+
 def main():
     np.random.seed(1337)
     cp.random.seed(1337)
@@ -174,6 +202,8 @@ def main():
     training_labels_filepath = os.path.join(input_path, 'train-labels-idx1-ubyte/train-labels-idx1-ubyte')
     test_images_filepath = os.path.join(input_path, 't10k-images-idx3-ubyte/t10k-images-idx3-ubyte')
     test_labels_filepath = os.path.join(input_path, 't10k-labels-idx1-ubyte/t10k-labels-idx1-ubyte')
+
+    # test_conv_seq()
 
     mnist_dataloader = MnistDataloader(
         training_images_filepath,
@@ -187,24 +217,17 @@ def main():
     # model = GANMnist(is_training=True)
     image_size=784
     latent_size=128
-    # desc = GANDiscriminator(image_size, is_training=True)
-    # gen = GANGenerator(latent_size, image_size, is_training=True)
-    # # pred = desc.forward(ag.Tensor(x_train))
-    # image = gen.forward(ag.random((1,latent_size)))
-    # plt.imshow(image.value()[0].get().reshape(28,28), cmap='gray')
-    # plt.show()
 
     model = GANMnist(latent_size, image_size, is_training=True)
-    model.load_checkpoint("checkpoints/checkpoint_20250418.npy")
+    # model.load_checkpoint("checkpoints/checkpoint_20250418.npy")
     train_gan(
         model,
         trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=10),
-        num_iters=5000,
+        num_iters=100,
         minibatch_size=50,
-        learning_rate=1e-5
+        learning_rate=1e-4
     )
-
-    model.load_checkpoint("checkpoints/checkpoint_20250418.npy")
+    # model.load_checkpoint("checkpoints/checkpoint_20250418.npy")
     y = model.generate(10)
 
     fig, axes = plt.subplots(2, 5, figsize=(12, 6))

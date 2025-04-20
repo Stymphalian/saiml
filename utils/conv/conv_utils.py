@@ -3,6 +3,18 @@ import functools
 from devices import xp
 from .. import utils
 
+def get_slicing(x_shape, axes, replacements):
+    assert len(axes) == len(replacements)
+    axes = [axis if axis >= 0 else len(x_shape) + axis for axis in axes]
+    mapping = {axis: replacement for axis, replacement in zip(axes, replacements)}
+    slices = []
+    for axis in range(len(x_shape)):
+        if axis in axes:
+            slices.append(mapping[axis])
+        else:
+            slices.append(None)
+    return slices
+
 def check_if_shapes_work(x_shape, ks, stride, padding):
     xh, xw = x_shape
     kh, kw = ks, ks
@@ -22,19 +34,64 @@ def check_if_shapes_work(x_shape, ks, stride, padding):
     valid = (new_height == xh and  new_width == xw)
     return (valid, (yh, yw))
 
-def get_new_height_width(x_shape, kernel_shape, stride, padding, dilate):
-    if len(x_shape) == 3:
-        kc, kh, kw = kernel_shape
-        xc, xh, xw = x_shape
-    else:
-        kh, kw = kernel_shape
-        xh, xw = x_shape
+def get_conv2d_height_width(x_shape, kernel_shape, stride, padding, dilate=0):
+    assert len(x_shape) >= 2
+    assert len(kernel_shape) >= 2
+
+    kh, kw = kernel_shape[-2:]
+    xh, xw = x_shape[-2:]
     xh = xh + (xh - 1) * dilate
     xw = xw + (xw - 1) * dilate
 
     new_height = (xh - kh + 2*padding) // stride + 1
     new_width = (xw - kw + 2*padding) // stride + 1
     return (new_height, new_width)
+
+def get_conv2d_transpose_height_width(y_shape, kernel_shape, stride, padding):
+    yc, yh, yw = y_shape
+    kc, kh, kw = kernel_shape
+
+    # We want to calculate the stride for the conv_transpose such that we 
+    # can get the same shape as the forward input X.
+    # From the formula for calculating the normal forward conv2d output shape
+    #   y = (x - k + 2p / s) + 1  (1)
+    # isolate for x in that equation.
+    #   x = (y - 1)*s + k - 2p    (2)
+    # The equation for the conv2d_transpose outupt shape is this:
+    #   x = y + (k-1)*s'          (3)
+    # Where s' is the stride we want to determine.
+    # Isolate for s'
+    #   s' = (x - y) / (k-1)      (4)
+    # Substitude (2) into (4) and we can get the desired stride s'
+    xh = (yh-1)*stride + kh - 2*padding
+    xw = (yw-1)*stride + kw - 2*padding
+    stride_row = math.ceil((xh - yh) / (kh -1))
+    stride_col = math.ceil((xw - yw) / (kw -1))
+    if (stride_row < 0) or (stride_col < 0):
+        raise Exception("Stride is negative")
+    new_height = yh + (kh - 1)*stride_row
+    new_width = yw + (kw - 1)*stride_col
+    return (new_height, new_width)
+
+def validate_conv2d_sequence(seq):
+    next_ts = None
+    for ts in seq:
+        (nc, h,w), (kc, kh, kw), stride, padding = ts
+        if next_ts is not None and next_ts != ts[0]:
+            raise Exception("Shapes do not match up")
+        next_ts = get_conv2d_height_width((nc, h, w), (kc, kh, kw), stride, padding, 0)
+        next_ts = (kc, next_ts[0], next_ts[1])
+        print(f"{ts} -> {next_ts}")
+
+def validate_conv2d_transpose_sequence(seq):
+    next_ts = None
+    for ts in seq:
+        (nc, h,w), (kc, kh, kw), stride, padding = ts
+        if next_ts is not None and next_ts != ts[0]:
+            raise Exception("Shapes do not match up")
+        next_ts = get_conv2d_transpose_height_width((nc, h, w), (kc, kh, kw), stride, padding)
+        next_ts = (kc, next_ts[0], next_ts[1])
+        print(f"{ts} -> {next_ts}")
 
 def vectorize_input_for_convolution(x, kernel_shape, stride=1, padding=0):
     assert x.ndim == len(kernel_shape)
@@ -100,8 +157,10 @@ def get_convolution_positions(x_shape, kernel_shape, stride=1, padding=0):
     rows.shape = (#convolutions, kernel_height*kernel_width)
     cols.shape = (#convolutions, kernel_height*kernel_width)
     """
-    xc, xh, xw = x_shape
-    kc, kh, kw = kernel_shape
+    assert len(x_shape) >= 2
+    assert len(kernel_shape) >= 2
+    xh, xw = x_shape[-2:]
+    kh, kw = kernel_shape[-2:]
     if padding > 0:
         xh += 2 * padding
         xw += 2 * padding
@@ -157,42 +216,51 @@ def vectorize_kernel_maxpool(x, kernel_shape, stride=1):
     vk = x_identity[indices]
     return vk
     
-def vectorize_kernel(x_shape, kernel, stride=1, padding=0, dilate=0):
+def vectorize_kernel(x_shape, kernel, stride=1, pad=0, dilate=0):
     """
-    Output.shape == (new_height*new_width, x_shape.size)
+    x_shape = (...b, xh, xw)
+    kernel = (...ks, kh, kw)
+    Output.shape == (..., new_height*new_width, x_shape.size)
     """
     # TODO: How to do this operation purely using numpy?
-    assert len(x_shape) == 3
-    assert len(kernel.shape) == 3
-    assert kernel.shape[1] == kernel.shape[2]
-    assert x_shape[0] == kernel.shape[0]
+    assert len(x_shape) >= 2, "Input must be atleast (..., h, w)"
+    assert len(kernel.shape) >= 2, "Kernel must be atleast (...ks, kh, kw)"
+    assert kernel.shape[-1] == kernel.shape[-2]
+    orig_kernel_shape = kernel.shape
+    x_shape = x_shape[-2:]
+    k_shape = kernel.shape[-2:]
+    kernel = xp.reshape(kernel, (-1,) + kernel.shape[-2:])
 
-    xc, xh, xw = x_shape
+    xh, xw = x_shape
+    kh, kw = k_shape
+    ks = kernel.shape[0]
     if dilate > 0:
         xh += (xh - 1) * dilate
         xw += (xw - 1) * dilate
-    if padding > 0:
-        xh += 2 * padding
-        xw += 2 * padding
-    kc, kh, kw = kernel.shape
-
-    new_height, new_width = get_new_height_width(
-        x_shape, kernel.shape, stride, padding, dilate)
+    if pad > 0:
+        xh += 2 * pad
+        xw += 2 * pad
+    
+    new_height, new_width = get_conv2d_height_width(x_shape, k_shape, stride, pad, dilate)
     output_size = new_height * new_width
     input_size = xh * xw
-    M = xp.zeros((kc, output_size, input_size), dtype=xp.float64)
-    scratch = xp.zeros((xc, xh, xw), dtype=xp.float64)
 
-    kernel_index = 0
-    for row in range(new_height):
-        for col in range(new_width):
-            h = row * stride
-            w = col * stride
-
-            scratch[:, h:h+kh, w:w+kw] = kernel[:]
-            M[:, kernel_index] = scratch.reshape(kc, -1)
-            scratch[:, h:h+kh, w:w+kw] = 0
-            kernel_index += 1
+    
+    rows, cols = get_convolution_positions(x_shape, k_shape, stride, pad)   # (nh*nw, xh*xw)
+    # flatten the kernel. flatten spatial dimensions and merge other dims.  # (...ks, kh, kw) == kernel.shape
+    kernel2 = xp.reshape(kernel, (1, ks, kh*kw))                            # (1, ks, kh*kw)
+    # broadcast to the output_size in order to allow for indexing into M
+    kernel2 = xp.broadcast_to(kernel2, (output_size, ks, kh*kw))            # (nh*nw, ks, kh*kw)
+    # Need to move the 'ks' to the end. Due to how numpy indexing works
+    # any ":" selection in the indexing of M is moved to the end of the shape
+    kernel2 = xp.transpose(kernel2, (0,2,1))                                # (nh*nw, kh*kw, ks)
+    
+    os = xp.arange(0, output_size).reshape((output_size, 1))                # (nh*nw, 1)
+    M = xp.zeros((output_size, ks, xh, xw), dtype=xp.float64)               # (nh*nw, ks, xh, xw)
+    # assign the kernel into the convolution positions
+    M[os, :, rows, cols] = kernel2                                          # (nh*nw, ks, xh, xw)
+    M = xp.transpose(M, (1,0,2,3))                                          # (ks, nh*nw, xh, xw)
+    M = M.reshape(orig_kernel_shape[:-2] + (output_size, input_size))       # (...ks, nh*nw, xh*xw)
     return M
 
 def vectorize_kernel_with_fn(x, kernel_shape, fn, stride=1):

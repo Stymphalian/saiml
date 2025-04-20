@@ -11,12 +11,12 @@ from .vectorized import (
     _max_pool2d_gradient_vectorized
 )
 
-def convolve2d(x, kernel, stride=1, padding=0, dilate=0):
-    return _convolve2d_vectorized(x, kernel, stride=stride, padding=padding)
+def convolve2d(x, kernel, stride=1, padding=0):
+    return _convolve2d_vectorized(x, kernel, stride=stride, pad=padding)
 
-def convolve2d_gradient(x, kernel, outGrad, stride=1, padding=0, dilate=0):
+def convolve2d_gradient(x, kernel, outGrad, stride=1, padding=0):
     return _convolve2d_gradient_vectorized(
-        x, kernel, outGrad, stride=stride, padding=padding)
+        x, kernel, outGrad, stride=stride, pad=padding)
 
 def convolve2d_transpose(y, kernel, stride=1, padding=0, outer_padding=0):
     return _convolve2d_transpose_iterative(

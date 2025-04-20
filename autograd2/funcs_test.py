@@ -154,6 +154,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
             return ag.convolve2d(x, k, padding=2)
         self.numeric_check(forward, x, k)
 
+    @unittest.skip("Dilation is no longer supported")
     def test_convolve2d_with_dilation(self):
         xp.random.seed(1)
         x = ag.Tensor(xp.random.rand(1,5,5), requires_grad=True)
@@ -169,7 +170,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         k = ag.Tensor(xp.random.rand(1,3,3), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x, k)
-            return ag.convolve2d(x, k, stride=2, padding=2, dilate=2)
+            return ag.convolve2d(x, k, stride=2, padding=2)
         self.numeric_check(forward, x, k)
 
     def test_convolve2d_transpose(self):
@@ -340,9 +341,10 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
     def test_inverse_dropout(self):
         x1 = xp.arange(2*3, dtype=xp.float64).reshape(2,3) + 1
         x = ag.Tensor(x1, requires_grad=True)
+        rng_seed = 3 if xp.__name__ == 'cupy' else 268
 
         # In training, with dropout
-        got = ag.inverse_dropout(x, True, p=0.3, rng_seed=3)
+        got = ag.inverse_dropout(x, True, p=0.3, rng_seed=rng_seed)
         want = xp.array([
             [1.0, 0.0, 3.0],
             [0.0, 5.0, 6.0]

@@ -8,7 +8,7 @@ def _convolve2d_iterative(x, kernel, stride=1, padding=0, dilate=0):
     spatial_axes = (1,2)
     assert kernel.shape[spatial_axes[0]] == kernel.shape[spatial_axes[1]]
     
-    new_height, new_width = get_new_height_width(
+    new_height, new_width = get_conv2d_height_width(
         x.shape, kernel.shape, stride, padding, dilate)
     x = utils.zero_dilate(x, dilate, axes=spatial_axes)
     x = utils.zero_pad(x, padding, axes=spatial_axes)
@@ -34,7 +34,7 @@ def _convolve2d_gradient_iterative(x, kernel, outGrad, stride=1, padding=0, dila
     assert x.ndim == 3
     spatial_axes = (1,2)
     assert kernel.shape[spatial_axes[0]] == kernel.shape[spatial_axes[1]]
-    new_height, new_width = get_new_height_width(
+    new_height, new_width = get_conv2d_height_width(
         x.shape, kernel.shape, stride, padding, dilate)
     
     x = utils.zero_dilate(x, dilate, axes=spatial_axes)

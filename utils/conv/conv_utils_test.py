@@ -76,8 +76,9 @@ class TestConvUtils(unittest.TestCase):
 
     def test_vectorize_kernel(self):
         xp.random.seed(1)
-        x = xp.random.rand(3,3,3)
+        x = xp.random.rand(1,2,3,4,3,3)
         k = xp.arange(3*2*2).reshape(3,2,2) + 1
+        k = xp.broadcast_to(k, (5,) + k.shape)
         got = utils.vectorize_kernel(x.shape, k)
 
         want = xp.array([
@@ -100,7 +101,44 @@ class TestConvUtils(unittest.TestCase):
                 [ 0.,  0.,  0.,  0.,  9., 10.,  0., 11., 12.],
             ]
         ])
-        self.assertTrue(xp.array_equal(got, want))
+        self.assertEqual(got.shape[0], 5)
+        self.assertEqual(got.shape[1], 3)
+        self.assertTrue(xp.array_equal(got[0], want))
+        self.assertTrue(xp.array_equal(got[1], want))
+        self.assertTrue(xp.array_equal(got[2], want))
+
+    def test_vectorize_kernel_with_stride_padding(self):
+        xp.random.seed(1)
+        x = xp.random.rand(1,2,2)
+        k = xp.arange(3*2*2).reshape(3,2,2) + 1
+        k = xp.broadcast_to(k, (5,) + k.shape)
+        got = utils.vectorize_kernel(x.shape, k, stride=2, pad=1)
+
+        want = xp.array([
+            [
+                [1., 2., 0., 0., 3., 4., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 1., 2., 0., 0., 3., 4., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 1., 2., 0., 0., 3., 4., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 1., 2., 0., 0., 3., 4.],
+            ],
+            [
+                [5., 6., 0., 0., 7., 8., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 5., 6., 0., 0., 7., 8., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 5., 6., 0., 0., 7., 8., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 5., 6., 0., 0., 7., 8.],
+            ],
+            [
+                [9., 10., 0., 0., 11., 12., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 9., 10., 0., 0., 11., 12., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 9., 10., 0., 0., 11., 12., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 9., 10., 0., 0., 11., 12.],
+            ],
+        ])
+        self.assertTrue(xp.array_equal(got[0], want))
+        self.assertTrue(xp.array_equal(got[1], want))
+        self.assertTrue(xp.array_equal(got[2], want))
+        self.assertTrue(xp.array_equal(got[3], want))
+        self.assertTrue(xp.array_equal(got[4], want))
 
     def test_vectorize_kernel_maxpool(self):
         xp.random.seed(1)

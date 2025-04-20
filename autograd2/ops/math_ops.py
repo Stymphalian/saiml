@@ -584,7 +584,10 @@ class TensorMax(Operator):
             axis = self.axis
             if isinstance(self.axis, int):
                 axis = (self.axis,)
-            xi = argmax_axes_vectorized_kernel(x.value(), axis, keepdims=True)
+            if xp == cp:
+                xi = argmax_axes_vectorized_kernel(x.value(), axis, keepdims=True)
+            else:
+                xi = argmax_axes_vectorized(x.value(), axis, keepdims=True)
             dx = xp.zeros(x.shape)
             xp.put(dx, xp.array(xi), 1)
 

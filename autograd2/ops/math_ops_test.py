@@ -397,6 +397,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[1,0,:,:], want3))
         self.assertTrue(xp.allclose(got[1,1,:,:], want4))
 
+    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel(self):
         xp.random.seed(0)
 
@@ -415,6 +416,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[0], want1))
         self.assertTrue(xp.allclose(got[1], want2))
 
+    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_seperated_axes(self):
         # test 2
         x = xp.arange(2*3*5*2)
@@ -437,6 +439,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[:,1,0,:], want3))
         self.assertTrue(xp.allclose(got[:,1,1,:], want4))
 
+    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_negative_indexing(self):
         # test negative indexing
         x = xp.arange(2*3*5)
@@ -452,6 +455,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[0], want1))
         self.assertTrue(xp.allclose(got[1], want2))
 
+    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_last_dimensions(self):
         # test 4 (should use optimized version)
         x = xp.arange(2*3*5*2)
@@ -490,8 +494,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         xp.random.shuffle(x1)
         x1 = x1.reshape(2,3,4) + 1.0
         x = ag.Tensor(x1, requires_grad=True)
-        # for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
-        for axis in [2]:
+        for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
             for keepdims in [True, False]:
                 def forward(params):
                     self.unravel_params(params, x)
@@ -579,7 +582,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         x1 = ag.Tensor(xp.random.rand(2,3,4), requires_grad=True)
         for axis in [None, 0, 1, 2, (0,1), (0,2), (1,2)]:
             for keepdims in [True, False]:
-                got = ag.norm(x1, axis=axis, keepdims=)
+                got = ag.norm(x1, axis=axis, keepdims=keepdims)
                 want = xp.linalg.norm(x1.value(), axis=axis, keepdims=keepdims)
                 self.assertTrue(xp.array_equal(got.value(), want))
 

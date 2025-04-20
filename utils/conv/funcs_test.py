@@ -15,14 +15,6 @@ import torch
 
 class TestConvFuncs(unittest.TestCase):
 
-    def test_convolve2d_dilation(self):
-        xp.random.seed(1)
-        x = xp.round(xp.random.rand(1,5,5), 2)
-        k = xp.round(xp.random.rand(1,3,3), 2)
-        pred = utils.convolve2d(x, k, dilate=2)
-        outGrad = xp.random.rand(*pred.shape)
-        got = utils.convolve2d_gradient(x, k, outGrad, dilate=2)
-
     def test_convolve2d_simple(self):
         x = xp.array([[
             [1,2,3],
@@ -40,7 +32,7 @@ class TestConvFuncs(unittest.TestCase):
         ]])
         self.assertTrue(xp.array_equal(got, want))
 
-    def test_convole2d_stride(self):
+    def test_convolve2d_stride(self):
         x = xp.array([[
             [0,0,0,0,0,0,0],
             [0,1,2,3,4,5,0],
@@ -63,7 +55,7 @@ class TestConvFuncs(unittest.TestCase):
         ]])
         self.assertTrue(xp.array_equal(got, want))
 
-    def test_convole2d_padding(self):
+    def test_convolve2d_padding(self):
         x = xp.array([[
             [1,2,3,4,5],
             [6,5,4,3,2],
@@ -200,9 +192,41 @@ class TestConvFuncs(unittest.TestCase):
             
         # print(got)
         # print(want)
-        # self.assertTrue(xp.allclose(got, want)) 
+        # self.assertTrue(xp.allclose(got, want))         
     
     def test_convolve_vectorized(self):
+        xp.random.seed(1)
+        x = xp.arange(5*5, dtype=xp.float64).reshape(1,1,5,5) + 1
+        k = xp.identity(3).reshape(1,1,3,3)
+        grad = xp.ones((1, 1, 5-3+1, 5-3+1)) / (3*3)
+        want = _convolve2d_iterative(x[0], k[0])
+        want_dx, want_dk = _convolve2d_gradient_iterative(x[0], k[0], grad[0])
+        got = _convolve2d_vectorized(x, k)
+        got_dx, got_dk = _convolve2d_gradient_vectorized(x, k, grad)
+
+        self.assertEqual(want.shape, got[0].shape)
+        self.assertEqual(want_dx.shape, got_dx[0].shape)
+        self.assertEqual(want_dk.shape, got_dk[0].shape)
+        self.assertTrue(xp.allclose(want, got[0]))
+        self.assertTrue(xp.allclose(want_dx, got_dx[0]))
+        self.assertTrue(xp.allclose(want_dk, got_dk[0]))
+
+    def test_convolve_vectorized2(self):
+        xp.random.seed(1)
+        x = xp.arange(2*5*5, dtype=xp.float64) + 1
+        x = xp.reshape(x, (2,1,5,5))               # (b, ch, xh, xw)
+        k = xp.identity(3).reshape(1,3,3)
+        k = xp.broadcast_to(k, (6,) + k.shape)     # (ks, ch, kh, kw)
+        want1 = _convolve2d_iterative(x[0], k[0])
+        want2 = _convolve2d_iterative(x[1], k[3])
+        got = _convolve2d_vectorized(x, k)         # (b, ks, nh, nw)
+
+        self.assertEqual(want1[0].shape, got[0][0].shape)
+        self.assertEqual(want2[0].shape, got[1][3].shape)
+        self.assertTrue(xp.allclose(want1[0], got[0][0]))
+        self.assertTrue(xp.allclose(want2[0], got[1][3]))
+
+    def test_convolve_vectorized3(self):
         xp.random.seed(1)
         x = xp.arange(5*5, dtype=xp.float64).reshape(1,5,5) + 1
         k = xp.identity(3).reshape(1,3,3)
@@ -219,25 +243,59 @@ class TestConvFuncs(unittest.TestCase):
         self.assertTrue(xp.allclose(want_dx, got_dx))
         self.assertTrue(xp.allclose(want_dk, got_dk))
 
+    def test_convolve_vectorized_shapes(self):
+        shapes = [
+            ((3,4,4), (3,2,2), (1,3,3)),
+            ((3,4,4), (5,3,2,2), (5, 3, 3)),
+            ((3,4,4), (2,5,3,2,2), (10, 3, 3)),
+
+            ((5,3,4,4), (3,2,2), (5, 1, 3, 3)),
+            ((5,3,4,4), (6,3,2,2), (5, 6, 3, 3)),
+            ((5,3,4,4), (2,6,3,2,2), (5, 12, 3, 3)),
+
+            ((10,5,3,4,4), (3,2,2), (10, 5, 1, 3, 3)),
+            ((10,5,3,4,4), (2,3,2,2), (10, 5, 2, 3, 3)),
+            ((10,5,3,4,4), (5,2,3,2,2), (10, 5, 10, 3, 3)),
+        ]
+        for x_shape, k_shape, want_shape in shapes:
+            xp.random.seed(1)
+            x = xp.random.rand(*x_shape)
+            k = xp.random.rand(*k_shape)
+            got = _convolve2d_vectorized(x, k)
+            self.assertEquals(got.shape, want_shape)
+
+    def test_convolve_gradient(self):
+        x_shape = (100, 128, 3, 3)
+        kernel_shape = (256, 128, 3, 3)
+        x = xp.random.rand(*x_shape)
+        k = xp.random.rand(*kernel_shape)
+
+        y = _convolve2d_vectorized(x, k)
+        dy = xp.random.rand(*y.shape)
+        dy_dx, dy_dk = _convolve2d_gradient_vectorized(x, k, dy)
+        self.assertEqual(dy_dx.shape, x.shape)
+        self.assertEqual(dy_dk.shape, k.shape)
+
     def test_convolve_vectorized_with_stride_padding(self):
         xp.random.seed(1)
         stride=2
         padding=2
-        x = xp.arange(8*8, dtype=xp.float64).reshape(1,8,8) + 1
-        k = xp.random.rand(3,3).reshape(1,3,3)
-        want = _convolve2d_iterative(x, k, stride, padding)
+        x = xp.arange(8*8, dtype=xp.float64).reshape(1,1,8,8) + 1
+        k = xp.random.rand(3,3).reshape(1,1,3,3)
+        want = _convolve2d_iterative(x[0], k[0], stride, padding)
         grad = xp.ones(want.shape) / want.size
-        want_dx, want_dk = _convolve2d_gradient_iterative(x, k, grad, stride, padding)
+        want_dx, want_dk = _convolve2d_gradient_iterative(x[0], k[0], grad, stride, padding)
          
         got = _convolve2d_vectorized(x, k, stride, padding)
+        grad = xp.ones(got.shape) / got.size
         got_dx, got_dk = _convolve2d_gradient_vectorized(x, k, grad, stride, padding)
 
-        self.assertEqual(want.shape, got.shape)
-        self.assertEqual(want_dx.shape, got_dx.shape)
-        self.assertEqual(want_dk.shape, got_dk.shape)
-        self.assertTrue(xp.allclose(want, got))
-        self.assertTrue(xp.allclose(want_dx, got_dx))
-        self.assertTrue(xp.allclose(want_dk, got_dk))
+        self.assertEqual(want[0].shape, got[0][0].shape)
+        self.assertEqual(want_dx.shape, got_dx[0].shape)
+        self.assertEqual(want_dk.shape, got_dk[0].shape)
+        self.assertTrue(xp.allclose(want[0], got[0][0]))
+        self.assertTrue(xp.allclose(want_dx, got_dx[0]))
+        self.assertTrue(xp.allclose(want_dk, got_dk[0]))
 
     def test_max_pool(self):
         xp.random.seed(1)
