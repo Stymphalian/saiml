@@ -7,6 +7,8 @@ from .iterative import (
 from .vectorized import (
     _convolve2d_vectorized,
     _convolve2d_gradient_vectorized,
+    _convolve2d_transpose_vectorized,
+    _convolve2d_transpose_gradient_vectorized,
     _max_pool2d_vectorized,
     _max_pool2d_gradient_vectorized
 )
@@ -19,11 +21,11 @@ def convolve2d_gradient(x, kernel, outGrad, stride=1, padding=0):
         x, kernel, outGrad, stride=stride, pad=padding)
 
 def convolve2d_transpose(y, kernel, stride=1, padding=0, outer_padding=0):
-    return _convolve2d_transpose_iterative(
+    return _convolve2d_transpose_vectorized(
         y,
         kernel,
         stride=stride,
-        padding=padding,
+        pad=padding,
         outer_padding=outer_padding)
     
 def convolve2d_transpose_gradient(y, kernel, outGrad, stride=1, padding=0, outer_padding=0):
@@ -32,7 +34,7 @@ def convolve2d_transpose_gradient(y, kernel, outGrad, stride=1, padding=0, outer
         kernel,
         outGrad,
         stride=stride,
-        padding=padding,
+        pad=padding,
         outer_padding=outer_padding)
 
 def max_pool2d(x, kernel_size, stride=1, padding=0):

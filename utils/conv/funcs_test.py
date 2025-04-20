@@ -8,7 +8,8 @@ from .iterative import (
 )
 from .vectorized import (
     _convolve2d_vectorized,
-    _convolve2d_gradient_vectorized
+    _convolve2d_gradient_vectorized,
+    _convolve2d_transpose_vectorized,
 )
 from scipy import signal
 import torch
@@ -126,11 +127,18 @@ class TestConvFuncs(unittest.TestCase):
 
     def test_convolve2d_transpose_with_channels(self):
         xp.random.seed(1)
-        x = xp.array([[
-            [1,2,1],
-            [2,1,2],
-            [1,1,2]
-        ]])
+        x = xp.array([
+            [
+                [1,2,1],
+                [2,1,2],
+                [1,1,2]
+            ],
+            [
+                [1,2,1],
+                [2,1,2],
+                [1,1,2]
+            ]
+        ])
         kernel = xp.array([
             [
                 [55,52],
@@ -149,6 +157,17 @@ class TestConvFuncs(unittest.TestCase):
                 [0,0,0,0],
         ]])
         self.assertTrue(xp.array_equal(got, want))
+
+    def test_convolve2d_transpose_stride_padding(self):
+        xp.random.seed(1)
+        pad=1
+        outer_padding=2
+        x = xp.random.rand(1,8,8)
+        kernel = xp.random.rand(1,3,3)
+        got = utils.convolve2d_transpose(
+            x, kernel, stride=1, padding=pad, outer_padding=outer_padding)
+        self.assertTrue(got.shape == (1, 4, 4))
+        # self.assertTrue(xp.array_equal(got, want))
 
     @unittest.skip("Test against torch implementation")
     def test_convolve2d_transpose_against_torch(self):
@@ -192,7 +211,16 @@ class TestConvFuncs(unittest.TestCase):
             
         # print(got)
         # print(want)
-        # self.assertTrue(xp.allclose(got, want))         
+        # self.assertTrue(xp.allclose(got, want))   
+
+    def test_convolve2d_with_transpose(self):
+        xp.random.seed(1)
+        x = xp.arange(1*5*5, dtype=xp.float64).reshape(1,5,5) + 1
+        k = xp.identity(3).reshape(1,3,3)
+
+        y = _convolve2d_vectorized(x, k, pad=1)
+        x1 = _convolve2d_transpose_vectorized(y, k, pad=1)
+        self.assertEqual(x.shape, x1.shape)
     
     def test_convolve_vectorized(self):
         xp.random.seed(1)

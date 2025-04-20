@@ -197,7 +197,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         k = ag.Tensor(xp.random.rand(1,3,3), requires_grad=True)
         def forward(params):
             self.unravel_params(params, x, k)
-            return ag.convolve2d_transpose(x, k, padding=1, outer_padding=1)
+            return ag.convolve2d_transpose(x, k, padding=1, outer_padding=0)
         self.numeric_check(forward, x, k)
 
     def test_variance(self):

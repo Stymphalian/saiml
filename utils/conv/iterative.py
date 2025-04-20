@@ -111,7 +111,7 @@ def _convolve2d_transpose_iterative(y, kernel, stride=1, padding=0, outer_paddin
     x = x[xp.newaxis, :,:]
     return x
 
-def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, padding=0, outer_padding=0):
+def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, pad=0, outer_padding=0):
     assert y.ndim == kernel.ndim
     assert kernel.ndim == 3
     spatial_axes = (1,2)
@@ -120,8 +120,8 @@ def _convolve2d_transpose_gradient_iterative(y, kernel, outGrad, stride=1, paddi
     yc, yh, yw = y.shape
     kc, kh, kw = kernel.shape
 
-    xh = (yh-1)*stride + kh - 2*padding
-    xw = (yw-1)*stride + kw - 2*padding
+    xh = (yh-1)*stride + kh - 2*pad
+    xw = (yw-1)*stride + kw - 2*pad
     stride_row = math.ceil((xh - yh) / (kh -1))
     stride_col = math.ceil((xw - yw) / (kw -1))
     if (stride_row < 0) or (stride_col < 0):
