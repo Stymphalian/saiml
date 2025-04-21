@@ -109,7 +109,7 @@ class TestConvFuncs(unittest.TestCase):
             )
         self.assertTrue(xp.allclose(got, xp.array(want)))
 
-    def test_convolve2d_transpose_against_reference(self):
+    def test_convolve2d_transpose_with_stride_and_pad(self):
         stride = 2
         pad = 1
         nc = 5

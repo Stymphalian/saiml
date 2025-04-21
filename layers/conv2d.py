@@ -1,6 +1,7 @@
 
 import math
-import numpy as np
+# import numpy as np
+from devices import xp
 import autograd2 as ag
 from .module import Module
 
@@ -18,8 +19,9 @@ class Conv2d(Module):
         self.padding = padding
 
         scale = math.sqrt(2.0/(self.input_channels*self.input_height*self.input_width))
-        kernels = [np.random.normal(scale=scale, size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
-        bias = [np.random.normal(scale=scale, size=(1,1)) for x in range(self.num_kernels)]
+        size =(self.input_channels, kernel_size, kernel_size)
+        kernels = [xp.random.normal(scale=scale, size=size) for _ in range(self.num_kernels)]
+        bias = [xp.random.normal(scale=scale, size=(1,1)) for _ in range(self.num_kernels)]
         self.W = [ag.Tensor(d, requires_grad=True) for d in kernels]
         self.b = [ag.Tensor(d, requires_grad=True) for d in bias]
         self.params = self.W + self.b
@@ -55,8 +57,9 @@ class Conv2dTranspose(Module):
         self.padding = padding
 
         scale = math.sqrt(2.0/(self.input_channels*self.input_height*self.input_width))
-        kernels = [np.random.normal(scale=scale, size=(self.input_channels, kernel_size, kernel_size)) for x in range(self.num_kernels)]
-        bias = [np.random.normal(scale=2, size=(1,1)) for x in range(self.num_kernels)]
+        size = (self.input_channels, kernel_size, kernel_size)
+        kernels = [xp.random.normal(scale=scale, size=size) for _ in range(self.num_kernels)]
+        bias = [xp.random.normal(scale=scale, size=(1,1)) for _ in range(self.num_kernels)]
         self.W = [ag.Tensor(d, requires_grad=True) for d in kernels]
         self.b = [ag.Tensor(d, requires_grad=True) for d in bias]
         self.params = self.W + self.b

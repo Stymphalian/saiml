@@ -48,8 +48,8 @@ def get_conv2d_height_width(x_shape, kernel_shape, stride, padding, dilate=0):
     return (new_height, new_width)
 
 def get_conv2d_transpose_height_width(y_shape, kernel_shape, stride, padding):
-    yc, yh, yw = y_shape
-    kc, kh, kw = kernel_shape
+    yh, yw = y_shape[-2:]
+    kh, kw = kernel_shape[-2:]
 
     # We want to calculate the stride for the conv_transpose such that we 
     # can get the same shape as the forward input X.

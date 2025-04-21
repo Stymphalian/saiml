@@ -209,14 +209,14 @@ def main():
 
     model = GANMnist(latent_size, image_size, is_training=True)
     # model.load_checkpoint("checkpoints/checkpoint_20250418.npy")
-    # train_gan(
-    #     model,
-    #     trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=10),
-    #     num_iters=2000,
-    #     minibatch_size=50,
-    #     learning_rate=1e-4
-    # )
-    model.load_checkpoint("checkpoints/checkpoint_20250420.npy")
+    train_gan(
+        model,
+        trainer.BatchLoader().from_arrays(x_train, y_train, num_batches=10),
+        num_iters=100,
+        minibatch_size=10,
+        learning_rate=1e-4
+    )
+    # model.load_checkpoint("checkpoints/checkpoint_20250420.npy")
     y = model.generate(10)
 
     fig, axes = plt.subplots(2, 5, figsize=(12, 6))
