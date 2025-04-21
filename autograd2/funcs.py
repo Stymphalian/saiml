@@ -29,12 +29,11 @@ class TensorConvolve2D(Operator):
         return Tensor(dx), Tensor(dk)
     
 class TensorConvolve2DTranspose(Operator):
-    def __init__(self, stride, padding, outer_padding):
+    def __init__(self, stride, padding):
         assert(stride >= 1)
         assert(padding >= 0)
         self.stride = stride
         self.padding = padding
-        self.outer_padding = outer_padding
 
     def compute(self, *inputs: Tuple[Tensor]):
         x = inputs[0].value()
@@ -43,14 +42,14 @@ class TensorConvolve2DTranspose(Operator):
         assert(kernel.ndim ==  3)
         assert(kernel.shape[1] == kernel.shape[2])
         return conv.convolve2d_transpose(
-            x, kernel, self.stride, self.padding, self.outer_padding)
+            x, kernel, self.stride, self.padding)
 
     def gradients(self, node, outGrad):
         x = node.inputs[0].value()
         kernel = node.inputs[1].value()
         dy = outGrad.value()
         dx, dk = conv.convolve2d_transpose_gradient(
-            x, kernel, dy, self.stride, self.padding, self.outer_padding)
+            x, kernel, dy, self.stride, self.padding)
         return Tensor(dx), Tensor(dk)
 
 from loss import cross_entropy_loss as loss_cross_entropy_loss
@@ -182,8 +181,8 @@ def cross_entropy_loss(y_pred, y_true, axis=None):
     return -ag.summation(y_true * ag.log(y_pred), axis=axis)
 def convolve2d(x, kernel, stride=1, padding=0):
     return TensorConvolve2D(stride, padding).tensor(x, kernel)
-def convolve2d_transpose(x, kernel, stride=1, padding=0, outer_padding=0):
-    return TensorConvolve2DTranspose(stride, padding, outer_padding=outer_padding).tensor(x, kernel)
+def convolve2d_transpose(x, kernel, stride=1, padding=0):
+    return TensorConvolve2DTranspose(stride, padding).tensor(x, kernel)
 def sigmoid(x):
     return TensorSigmoid().tensor(x)
     # return ag.Tensor(1) / (ag.exp(-x) + 1.0)

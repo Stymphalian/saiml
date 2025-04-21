@@ -5,11 +5,14 @@ import utils
 from .iterative import (
     _convolve2d_iterative,
     _convolve2d_gradient_iterative,
+    _convolve2d_transpose_iterative,
+    _convolve2d_transpose_gradient_iterative,
 )
 from .vectorized import (
     _convolve2d_vectorized,
     _convolve2d_gradient_vectorized,
     _convolve2d_transpose_vectorized,
+    _convolve2d_transpose_gradient_vectorized,
 )
 from scipy import signal
 import torch
@@ -106,8 +109,26 @@ class TestConvFuncs(unittest.TestCase):
             )
         self.assertTrue(xp.allclose(got, xp.array(want)))
 
+    def test_convolve2d_transpose_against_reference(self):
+        stride = 2
+        pad = 1
+        nc = 5
+        y_shape = (2, nc, 5, 5)
+        k_shape = (nc, 3, 3)
+
+        y = xp.arange(numpy.prod(y_shape)).reshape(y_shape) + 1.0
+        k = xp.arange(numpy.prod(k_shape)).reshape(k_shape) + 1.0
+        x = utils.convolve2d_transpose(y, k, stride=stride, padding=pad)
+        self.assertEqual(x.shape, (2, 1, 9, 9))
+
+        grad = xp.ones(x.shape)
+        dy, dk = utils.convolve2d_transpose_gradient(y, k, grad, stride=stride, padding=pad)
+        self.assertEqual(dy.shape, y.shape)
+        self.assertEqual(dk.shape, k.shape)
+
+
     def test_convolve2d_transpose(self):
-        x = xp.array([[
+        y = xp.array([[
             [1,2,1],
             [2,1,2],
             [1,1,2]
@@ -116,7 +137,7 @@ class TestConvFuncs(unittest.TestCase):
             [55,52],
             [57,50]
         ]])
-        got = utils.convolve2d_transpose(x, kernel)
+        got = utils.convolve2d_transpose(y, kernel)
         want = xp.array([[
             [55, 162, 159, 52],
             [167, 323, 319, 154],
@@ -124,6 +145,16 @@ class TestConvFuncs(unittest.TestCase):
             [57, 107, 164, 100]
         ]])
         self.assertTrue(xp.array_equal(got, want))
+
+        grad = xp.linspace(0, 10, got.size).reshape(got.shape)
+        got_dy, got_dk = utils.convolve2d_transpose_gradient(y, kernel, grad)
+        self.assertEqual(got_dy.shape, y.shape)
+        self.assertEqual(got_dk.shape, kernel.shape)
+
+        want_dy, want_dk = _convolve2d_transpose_gradient_iterative(y, kernel, grad)
+        self.assertTrue(xp.allclose(got_dy, want_dy))
+        self.assertTrue(xp.allclose(got_dk, want_dk))
+    
 
     def test_convolve2d_transpose_with_channels(self):
         xp.random.seed(1)
@@ -161,18 +192,17 @@ class TestConvFuncs(unittest.TestCase):
     def test_convolve2d_transpose_stride_padding(self):
         xp.random.seed(1)
         pad=1
-        outer_padding=2
         x = xp.random.rand(1,8,8)
         kernel = xp.random.rand(1,3,3)
         got = utils.convolve2d_transpose(
-            x, kernel, stride=1, padding=pad, outer_padding=outer_padding)
-        self.assertTrue(got.shape == (1, 4, 4))
+            x, kernel, stride=1, padding=pad)
+        self.assertTrue(got.shape == (1, 8, 8))
         # self.assertTrue(xp.array_equal(got, want))
 
     @unittest.skip("Test against torch implementation")
     def test_convolve2d_transpose_against_torch(self):
-        stride = 0
-        padding = 0
+        stride = 1
+        padding = 2
         xp.random.seed(1)
         x = xp.random.rand(1, 6, 6)
         kernel = xp.random.rand(1, 3,3)
@@ -185,8 +215,8 @@ class TestConvFuncs(unittest.TestCase):
             got = utils.convolve2d_transpose(y, kernel, stride, padding)
             # got = xp.round(got, 2)
 
-            y1 = torch.Tensor(y.copy().reshape((1,) + y.shape))
-            k1 = torch.Tensor(kernel.copy().reshape((1,) + kernel.shape))
+            y1 = torch.Tensor(y.get().copy().reshape((1,) + y.shape))
+            k1 = torch.Tensor(kernel.get().copy().reshape((1,) + kernel.shape))
             want = torch.nn.functional.conv_transpose2d(y1, k1, stride=stride, padding=padding).numpy()
             want = want[0]
 

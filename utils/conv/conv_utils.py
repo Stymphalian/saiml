@@ -65,13 +65,14 @@ def get_conv2d_transpose_height_width(y_shape, kernel_shape, stride, padding):
     # Substitude (2) into (4) and we can get the desired stride s'
     xh = (yh-1)*stride + kh - 2*padding
     xw = (yw-1)*stride + kw - 2*padding
-    stride_row = math.ceil((xh - yh) / (kh -1))
-    stride_col = math.ceil((xw - yw) / (kw -1))
-    if (stride_row < 0) or (stride_col < 0):
-        raise Exception("Stride is negative")
-    new_height = yh + (kh - 1)*stride_row
-    new_width = yw + (kw - 1)*stride_col
-    return (new_height, new_width)
+    return (xh, xw)
+    # stride_row = math.ceil((xh - yh) / (kh -1))
+    # stride_col = math.ceil((xw - yw) / (kw -1))
+    # if (stride_row < 0) or (stride_col < 0):
+    #     raise Exception("Stride is negative")
+    # new_height = yh + (kh - 1)*stride_row
+    # new_width = yw + (kw - 1)*stride_col
+    # return (new_height, new_width)
 
 def validate_conv2d_sequence(seq):
     next_ts = None

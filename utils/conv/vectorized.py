@@ -3,25 +3,7 @@ import numpy
 from devices import xp
 from .conv_utils import *
 
-# def _convolve2d_vectorized2(x, kernel, stride=1, padding=0, dilate=0):
-#     assert kernel.ndim == 3
-#     assert x.ndim == 3
-#     assert x.shape[0] == kernel.shape[0]
-
-#     new_height, new_width = get_conv2d_height_width(
-#         x.shape, kernel.shape, stride, padding, dilate)
-
-#     rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
-#     x_pad = utils.zero_pad(x, padding, axes=(1,2))
-#     x_prime = x_pad[:, rows, cols]
-#     flat_kernel = kernel.reshape(kernel.shape[0], -1, 1)
-#     z = xp.matmul(x_prime, flat_kernel)
-#     z = xp.sum(z, axis=0)
-#     z = xp.reshape(z, (1, new_height, new_width))
-#     return z
-
-# TODO: Allow for multiple kernels?
-def _convolve2d_vectorized3(x, kernel, stride=1, pad=0):
+def _convolve2d_vectorized2(x, kernel, stride=1, pad=0):
     """
     Convolve the input X with the kernel. Must have matching channels
     X.shape == (...b, ch, xh, xw)
@@ -81,6 +63,8 @@ def _convolve2d_vectorized(x, kernel, stride=1, pad=0):
     C = vectorize_kernel(x.shape, kernel, stride, pad)               # (...k, ch, nh*nw, xh1*xw1)
     C = xp.reshape(C, (k, ch) + C.shape[-2:])                        # (k, ch, nh*nw, xh1*xw1)
     x_pad = utils.zero_pad(x, pad, axes=(-1,-2))                     # (...b, ch, xh1, xw1)
+
+    # reshape x_pad into proper form
     flat_x = x_pad.flatten().reshape(x.shape[:-3] + (1, ch, -1, 1))  # (...b, 1, ch, xh1*xw1, 1)
     z = xp.matmul(C, flat_x)                                         # (...b, k, ch, nh*nw, 1)
 
@@ -88,94 +72,6 @@ def _convolve2d_vectorized(x, kernel, stride=1, pad=0):
     z = xp.sum(z, axis=-3)                                           # (...b, k, nh*nw, 1)
     z = xp.reshape(z, z.shape[:-2] + (new_height, new_width))        # (...b, k, nh, nw)
     return z
-
-def _convolve2d_gradient_vectorized_old(x, kernel, outGrad, stride=1, padding=0, dilate=0):
-    assert outGrad.ndim == 3
-    assert kernel.ndim == 3
-    assert x.ndim == 3
-    assert x.shape[0] == kernel.shape[0]
-    assert outGrad.shape[0] == 1
-
-    xpad = utils.zero_pad(x, padding, axes=(1,2))
-
-    vkernel = vectorize_kernel(x.shape, kernel, stride, padding)
-    vkernel = xp.transpose(vkernel, (0,2,1))
-    outGrad = outGrad.flatten().reshape(1,-1,1)
-    dx = xp.matmul(vkernel, outGrad).reshape(xpad.shape)
-    if padding > 0:
-        dx = dx[:, padding:-padding, padding:-padding]
-
-    rows, cols = get_convolution_positions(x.shape, kernel.shape, stride, padding)
-    x2 = xpad[:, rows, cols]
-    x2 = xp.transpose(x2, (0,2,1))
-    dk = xp.matmul(x2, outGrad).reshape(kernel.shape)
-
-    return (dx, dk)
-
-# outGrad.shape == (...b, k*ch, nh, nw)
-# TODO: Vectorized version of this DOES NOT WORK. You get OOM errors when doing
-# the matmul against the vectorized kernel and the gradient if they are big enough
-# The size blows up because we have to create k*ch size kernels.
-def _convolve2d_gradient_vectorized2(x, kernel, outGrad, stride=1, pad=0):
-    """
-    Return the gradient of the convolved output outGrad with respect to X and kernel
-    X.shape == (...b, ch, xh, ww)
-    kernel.shape == (...k, ch, kh, kw)
-    outGrad.shape == (...b, k, nh, nw)
-    Returns dx and dk
-    dx.shape == (..., ch, xh, xw)
-    dk.shape == (..., ch, kh, kw)
-    """
-    assert outGrad.ndim >= 3, "outGrad must be atleast (..., num_kernels, nh, nw)"
-    assert kernel.ndim >= 3, "Kernel must be atleast (..., ch, kh, kw)"
-    assert x.ndim >= 3, "X must be atleast (..., ch, xh, xw)"
-
-    x_shape = x.shape[-3:]
-    kernel_shape = kernel.shape[-3:]
-    assert x_shape[0] == kernel_shape[0]
-    assert outGrad.shape[-3] == int(numpy.prod(kernel.shape[:-3]))
-
-    k = int(numpy.prod(kernel.shape[:-3]))                                      # k
-    ch = kernel.shape[-3]                                                       # ch
-    ks = k*ch                                                                   # k*ch
-    # flatten the kernel to make it easier to work with
-    kernel2 = xp.reshape(kernel, (ks,) + kernel.shape[-2:])                     # (k*ch, kh, kw)
-
-    # Make the gradient into the correct shape
-    grad2 = outGrad.flatten().reshape(outGrad.shape[:-2] + (-1, 1))             # (...b, k, nh*nw, 1)
-    grad2 = xp.expand_dims(grad2, axis=-3)                                      # (...b, k, 1, nh*nw, 1) 
-    grad2 = xp.broadcast_to(grad2, grad2.shape[:-4] + (k,ch) + grad2.shape[-2:])# (...b, k, ch, nh*nw, 1)
-    grad2 = xp.reshape(grad2, grad2.shape[:-4] + (k*ch,) + grad2.shape[-2:])    # (...b, k*ch, nh*nw, 1)
-
-    # Matmul against the vectorized kernel to get dx
-    xpad = utils.zero_pad(x, pad, axes=(-1,-2))                                 # (...b, ch, xh, xw)
-    vkernel = vectorize_kernel(x_shape, kernel2, stride, pad)                   # (k*ch, nh*nw, xh*xw)
-    vkernel = xp.swapaxes(vkernel, -1, -2)                                      # (k*ch, xh*xw, nh*nw)
-                                                                                # (...b, k*ch, nh*nw, 1) == grad2.shape
-    dx = xp.matmul(vkernel, grad2)                                              # (...b, k*ch, xh*xw, 1)
-
-    # Sum over the kernels (not including the channels) and expand 
-    # back into X spatial dimensions.
-    dx = xp.reshape(dx, dx.shape[:-3] + (k, ch) + dx.shape[-2:])                # (...b, k, ch, xh*xw, 1)
-    dx = xp.sum(dx, axis=-4)                                                    # (...b, ch, xh*xw, 1)
-    dx = xp.reshape(dx, xpad.shape)                                             # (...b, ch, xh, xw)
-    if pad > 0:
-        dx = dx[..., pad:-pad, pad:-pad]
-
-    rows, cols = get_convolution_positions(x_shape, kernel_shape, stride, pad)  # (nh*nw, kh*kw)
-    x2 = xpad[..., rows, cols]                                                  # (...b, ch, nh*nw, kh*kw)
-    x2 = xp.swapaxes(x2, -1, -2)                                                # (...b, ch, kh*kw, nh*nw)
-    x2 = xp.reshape(x2, x2.shape[:-3] + (1,ch) + x2.shape[-2:])                 # (...b, 1, ch, kh*kw, nh*nw))
-    x2 = xp.broadcast_to(x2, x2.shape[:-4] + (k, ch) + x2.shape[-2:])           # (...b, k, ch, kh*kw, nh*nw))
-    x2 = xp.reshape(x2, x2.shape[:-4] + (k*ch,) + x2.shape[-2:])                # (...b, k*ch, kh*kw, nh*nw))
-                                                                                # (...b, k*ch, nh*nw, 1) == grad2
-    dk = xp.matmul(x2, grad2)                                                   # (...b, k*ch, kh*kw, 1)
-    dk = xp.sum(dk, axis=0)                                                     # (k*ch, kh*kw, 1)
-    dk = xp.reshape(dk, kernel.shape)                                           # (...k, ch, kh, kw)
-
-    assert dx.shape == x.shape
-    assert dk.shape == kernel.shape
-    return (dx, dk)
 
 def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, pad=0):
     """
@@ -233,7 +129,7 @@ def _convolve2d_gradient_vectorized(x, kernel, outGrad, stride=1, pad=0):
     assert dk.shape == kernel.shape
     return (dx, dk)
 
-def _convolve2d_transpose_vectorized(y, kernel, stride=1, pad=0, outer_padding=0):
+def _convolve2d_transpose_vectorized(y, kernel, stride=1, pad=0):
     assert y.ndim >= 3, "Y must be atleast (...b, ch, yh, yw)"
     assert kernel.ndim >= 3, "Kernel must be atleast (...k, ch, kh, kw)"
     assert y.shape[-3] == kernel.shape[-3], "Channels must match between y and kernel"
@@ -261,11 +157,11 @@ def _convolve2d_transpose_vectorized(y, kernel, stride=1, pad=0, outer_padding=0
     # pad the spatial dimensions
     C = vectorize_kernel(x_shape, kernel, stride, pad)    # (...k, ch, nh*nw, xh*xw)
     C = xp.reshape(C, (k,ch) + C.shape[-2:])              # (k, ch, nh*nw, xh*xw)
-    C = xp.swapaxes(C, -1, -2)                            # (k, ch, xh*xw, nh*nw)
+    CT = xp.swapaxes(C, -1, -2)                           # (k, ch, xh*xw, nh*nw)
 
-    # Reshape y into the proper form                      # (...b, ch, nh, nw) == y
-    flat_y = xp.reshape(y, y.shape[:-3] + (1, ch, -1, 1)) # (...b, 1, ch, nh*nw, 1)
-    x = xp.matmul(C, flat_y)                              # (...b, k, ch, xh*xw, 1)
+    # Reshape y into the proper form                       # (...b, ch, nh, nw) == y
+    flat_y = xp.reshape(y, y.shape[:-3] + (1, ch, -1, 1))  # (...b, 1, ch, nh*nw, 1)
+    x = xp.matmul(CT, flat_y)                              # (...b, k, ch, xh*xw, 1)
     
     # reshape x into proper form
     x = xp.sum(x, axis=-3)                                # (...b, k, xh*xw, 1)
@@ -274,13 +170,61 @@ def _convolve2d_transpose_vectorized(y, kernel, stride=1, pad=0, outer_padding=0
     # handle removal of padding
     if pad > 0 :
         x = x[..., pad:-pad, pad:-pad]
-    if outer_padding > 0:
-        x = x[..., outer_padding:-outer_padding, outer_padding:-outer_padding]
-
     return x
 
-def _convolve2d_transpose_gradient_vectorized(y, kernel, outGrad, stride=1, padding=0, outer_padding=0):
-    raise NotImplementedError()
+def _convolve2d_transpose_gradient_vectorized(y, kernel, outGrad, stride=1, pad=0):
+    assert y.ndim >= 3, "Y must be atleast (...b, ch, yh, yw)"
+    assert kernel.ndim >= 3, "Kernel must be atleast (...k, ch, kh, kw)"
+    assert outGrad.ndim >= 3, "OutGrad must be atleast (...b, k, xh, xw)"
+    assert y.shape[-3] == kernel.shape[-3], "Channels must match between y and kernel"
+
+    yh, yw = y.shape[-2:]
+    kh, kw = kernel.shape[-2:]
+    # We want to calculate the stride for the conv_transpose such that we 
+    # can get the same shape as the forward input X.
+    # From the formula for calculating the normal forward conv2d output shape
+    #   y = (x - k + 2p / s) + 1  (1)
+    # isolate for x in that equation.
+    #   x = (y - 1)*s + k - 2p    (2)
+    xh = (yh-1)*stride + kh - 2*pad
+    xw = (yw-1)*stride + kw - 2*pad
+    assert ((xh, xw) == outGrad.shape[-2:]), "Output shape does not match expected output shape"
+
+    k = int(numpy.prod(kernel.shape[:-3]))       # number of kernels, if any
+    ch = kernel.shape[-3]
+    outGradPad = utils.zero_pad(outGrad, pad, axes=(-1,-2))
+
+
+    # pad the spatial dimensions
+    C = vectorize_kernel((xh, xw), kernel, stride, pad)                         # (...k, ch, yh*yw, xh*xw)
+    C = xp.reshape(C, (k,ch) + C.shape[-2:])                                    # (k, ch, yh*yw, xh*xw)
+    CT = xp.swapaxes(C, -1, -2)                                                 # (k, ch, xh*xw, yh*yw)
+
+    # dy (convolve the kernel over the gradient X to get dY)
+    dx = outGradPad                                                             # (...b, k, xh, xw)
+    dx = xp.reshape(dx, dx.shape[:-3] + (k, 1, -1, 1))                          # (...b, k, 1, xh*xw, 1)
+    C                                                                           # (k, ch, yh*yw, xh*xw)
+    dy = xp.matmul(C, dx)                                                       # (...b, k, ch, yh*yw, 1)
+    dy = xp.sum(dy, axis=-4)                                                    # (...b, ch, yh*yw, 1)
+    dy = xp.reshape(dy, dy.shape[:-2] + (yh, yw))                               # (...b, ch, yh, yw)
+    dy = xp.reshape(dy, y.shape)                                                # (...b, ch, yh, yw)
+
+    # dk
+    rows, cols = get_convolution_positions((xh,xw), (kh, kw), stride, pad)      # (yh*yw, kh*kw)
+    dx = outGradPad[..., rows, cols]                                            # (...b, k, yh*yw, kh*kw)
+    dx = xp.swapaxes(dx, -1, -2)                                                # (...b, k, kh*kw, yh*yw)
+    dx = xp.reshape(dx, dx.shape[:-3] + (k, 1) + dx.shape[-2:])                 # (...b, k, 1, kh*kw, yh*yw))
+    y2 = y                                                                      # (...b, ch, yh, yw)
+    y2 = xp.reshape(y2, y2.shape[:-3] + (1, ch, -1, 1))                         # (...b, 1, ch, yh*yw, 1)
+
+    dk = xp.matmul(dx, y2)                                                      # (...b, k, ch, kh*kw, 1)
+    dk = xp.sum(dk, axis=0)                                                     # (k, ch, kh*kw, 1)
+    dk = xp.reshape(dk, kernel.shape)                                           # (...k, ch, kh, kw)
+
+    assert dy.shape == y.shape
+    assert dk.shape == kernel.shape
+    return (dy, dk)
+
 
 def _pool2d_vectorized(x, kernel_size, pool_func, stride=1, padding=0):
     """
