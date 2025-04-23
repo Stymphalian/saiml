@@ -87,8 +87,8 @@ def _conv_transpose(y, kernel, stride=1, pad=0, x_shape=None):
     C = vectorize_kernel((xh, xw), kernel, stride, pad)                         # (...k, ch, yh*yw, xh*xw)
     C = xp.reshape(C, (k,ch) + C.shape[-2:])                                    # (k, ch, yh*yw, xh*xw)
     C = xp.swapaxes(C, -1, -2)                                                  # (k, ch, xh*xw, yh*yw)
-    y2 = y                                                                      # (...b, k?, ch, yh, yw)
-    y2 = xp.reshape(y2, y2.shape[:-2] + (-1, 1))                                # (...b, k?, ch, yh*yw, 1)
+    y2 = y                                                                      # (...b, k, ch, yh, yw)
+    y2 = xp.reshape(y2, y2.shape[:-2] + (-1, 1))                                # (...b, k, ch, yh*yw, 1)
 
     x = xp.matmul(C, y2)                                                        # (...b, k, ch, xh*xw, 1)
     x = xp.reshape(x, x.shape[:-4] + (k, ch) + (xh1, xw1))                      # (...b, k, ch, xh, xw)
@@ -108,6 +108,7 @@ def _convolve2d_vectorized(x, kernel, stride=1, pad=0):
     assert kernel.ndim >= 3, "Kernel must be atleast (..., ch, kh, kw)"
     assert x.ndim >= 3, "X must be atleast (..., ch, xh, xw)"
 
+    # TODO: Should we replace this with vectorized_kernel?
     x1 = xp.expand_dims(x, -4)                              # (...b, 1, ch, xh, xw)
     z = _conv_forward(x1, kernel, stride, pad)              # (...b, k, ch, yh, yw)
     z = xp.sum(z, axis=-3)                                  # (...b, k, yh, yw)

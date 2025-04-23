@@ -15,9 +15,9 @@ class LayerNorm(Module):
 class LayerNorm2(Module):
     def __init__(self, features_shape, eps=1e-8):
         self.features_shape = features_shape
-        self.w = ag.Tensor(xp.ones(features_shape), requires_grad=True)
-        self.b = ag.Tensor(xp.zeros(features_shape), requires_grad=True)
-        self.params = [self.w, self.b]
+        # self.w = ag.Tensor(xp.ones(features_shape), requires_grad=True)
+        # self.b = ag.Tensor(xp.zeros(features_shape), requires_grad=True)
+        # self.params = [self.w, self.b]
         self.epsilon = ag.Tensor(eps)
     
     def forward(self, x):
@@ -30,7 +30,12 @@ class LayerNorm2(Module):
         var = ag.mean(u*u, axis=axes)
         stddev = ag.sqrt(var).reshape(reduced_shape)
 
-        z = u * self.w
+        z = u
         z = z / (stddev + self.epsilon)
-        z = z + self.b
+        z = z
         return z
+
+        # z = u * self.w
+        # z = z / (stddev + self.epsilon)
+        # z = z + self.b
+        # return z

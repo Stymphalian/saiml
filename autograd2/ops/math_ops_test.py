@@ -397,7 +397,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[1,0,:,:], want3))
         self.assertTrue(xp.allclose(got[1,1,:,:], want4))
 
-    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
+    @unittest.skipIf(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel(self):
         xp.random.seed(0)
 
@@ -416,7 +416,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[0], want1))
         self.assertTrue(xp.allclose(got[1], want2))
 
-    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
+    @unittest.skipIf(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_seperated_axes(self):
         # test 2
         x = xp.arange(2*3*5*2)
@@ -439,7 +439,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[:,1,0,:], want3))
         self.assertTrue(xp.allclose(got[:,1,1,:], want4))
 
-    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
+    @unittest.skipIf(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_negative_indexing(self):
         # test negative indexing
         x = xp.arange(2*3*5)
@@ -455,7 +455,7 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         self.assertTrue(xp.allclose(got[0], want1))
         self.assertTrue(xp.allclose(got[1], want2))
 
-    @unittest.skipif(not xp.__name__ == 'cupy', reason='cupy only')
+    @unittest.skipIf(not xp.__name__ == 'cupy', reason='cupy only')
     def test_argmax_axes_kernel_last_dimensions(self):
         # test 4 (should use optimized version)
         x = xp.arange(2*3*5*2)
@@ -642,6 +642,23 @@ class OperatorsTest(base_gradient_test.NumericalGradientTest):
         #     self.unravel_params(params, x1,x2)
         #     return ag.bitwise_or(x1, x2)
         # self.numeric_check(forward, x1, x2)
+
+    def test_abs(self):
+        x1 = ag.Tensor(xp.arange(9).reshape(3,3)-5, requires_grad=True)
+        got = ag.abs(x1)
+        want = xp.abs(x1.value())
+        self.assertTrue(xp.array_equal(got.value(), want))
+
+        got.backward()
+        got_grad = x1.grad
+        want_grad = xp.sign(x1.value())
+        self.assertTrue(xp.array_equal(got_grad.value(), want_grad))
+
+        x1 = ag.Tensor(xp.array([4,9,-16,25], dtype=xp.float64).reshape(2,2), requires_grad=True)
+        def forward(params):
+            self.unravel_params(params, x1)
+            return ag.abs(x1)
+        self.numeric_check(forward, x1)
 
 
 if __name__ == '__main__':

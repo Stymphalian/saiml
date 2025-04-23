@@ -179,6 +179,10 @@ def mean_square_error(y_pred, y_true, axis=None):
     return ag.mean(ag.power(y_true - y_pred, 2), axis=axis)
 def cross_entropy_loss(y_pred, y_true, axis=None):
     return -ag.summation(y_true * ag.log(y_pred), axis=axis)
+def l2_loss(y_pred, y_true, axis=None):
+    return mean_square_error(y_pred, y_true, axis=axis)
+def l1_loss(y_pred, y_true, axis=None):
+    return ag.mean(ag.abs(y_true - y_pred), axis=axis)
 def convolve2d(x, kernel, stride=1, padding=0):
     return TensorConvolve2D(stride, padding).tensor(x, kernel)
 def convolve2d_transpose(x, kernel, stride=1, padding=0):

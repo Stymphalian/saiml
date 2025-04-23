@@ -163,6 +163,21 @@ def train_gan(
     timestr = time.strftime("%Y%m%d")
     model.checkpoint(f"checkpoints/checkpoint_{timestr}.npy")
 
+import utils
+def test_conv_seq():
+    utils.conv_utils.validate_conv2d_sequence([
+        ((1, 28, 28), (16, 6, 6), 2, 0),
+        ((16, 12, 12), (32, 6, 6), 2, 0),
+        ((32, 4, 4), (64, 4, 4), 1, 0),
+        # ((64, 1, 1), _, _, _)
+    ])
+    print("transpose")
+    utils.conv_utils.validate_conv2d_transpose_sequence([
+        ((64,1,1), (32, 4, 4), 1, 0),
+        ((32,4,4), (16, 6, 6), 2, 0),
+        ((16,12,12), (1, 6, 6), 2, 0),
+        # ((1, 28, 28), _, _, _)
+    ])
 
 def main():
     np.random.seed(1337)

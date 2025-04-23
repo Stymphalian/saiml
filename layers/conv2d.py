@@ -10,6 +10,8 @@ class Conv2d(Module):
 
     def __init__(self, input_shape, num_kernels, kernel_size=3, stride=1, padding=0):
         self.input_shape = input_shape
+        if isinstance(input_shape, int):
+            input_shape = (input_shape, 1, 1)
         self.input_channels = input_shape[-3]
         self.input_height = input_shape[-2]
         self.input_width = input_shape[-1]
@@ -34,7 +36,7 @@ class Conv2d(Module):
         # self.params = [self.W, self.b]
 
     def forward(self, x):
-        assert x.shape[-3:] == self.input_shape
+        # assert x.shape[-3:] == self.input_shape
 
         output = []
         for k in range(self.num_kernels):
@@ -43,11 +45,16 @@ class Conv2d(Module):
             z1 = ag.convolve2d(x, kernel, stride=self.stride, padding=self.padding)
             z2 = ag.add(z1, bias)
             output.append(z2)
-        return ag.concatenate(output, axis=1)
+        y = ag.concatenate(output, axis=1)
+
+        print(f"Conv2D: {x.shape} -> {y.shape}")
+        return y
     
 class Conv2dTranspose(Module):
     def __init__(self, input_shape, num_kernels, kernel_size=3, stride=1, padding=0):
         self.input_shape = input_shape
+        if isinstance(input_shape, int):
+            input_shape = (input_shape, 1, 1)
         self.input_channels = input_shape[-3]
         self.input_height = input_shape[-2]
         self.input_width = input_shape[-1]
@@ -65,7 +72,7 @@ class Conv2dTranspose(Module):
         self.params = self.W + self.b
 
     def forward(self, x):
-        assert x.shape[1:] == self.input_shape
+        # assert x.shape[1:] == self.input_shape
 
         output = []
         for k in range(self.num_kernels):
@@ -74,4 +81,7 @@ class Conv2dTranspose(Module):
             z1 = ag.convolve2d_transpose(x, kernel, stride=self.stride, padding=self.padding)
             z2 = ag.add(z1, bias)
             output.append(z2)
-        return ag.concatenate(output, axis=1)
+        y = ag.concatenate(output, axis=1)
+        print(f"Conv2DTranspose: {x.shape} -> {y.shape}")
+        return y
+        

@@ -86,7 +86,6 @@ class TensorAddScalar(Operator):
     def gradients(self, node, outGrad):
         assert outGrad.shape == node.inputs[0].shape
         return outGrad
-    
 class TensorSub(Operator):
     def compute(self, *inputs: Tuple[Tensor]):
         return xp.subtract(inputs[0].value(), inputs[1].value())
@@ -660,7 +659,16 @@ class TensorBitwiseOr(Operator):
         assert a.shape == b.shape
         assert a.shape == outGrad.shape
         return outGrad, outGrad
-
+    
+class TensorAbsolute(Operator):
+    def compute(self, *inputs: Tuple[Tensor]):
+        return xp.abs(inputs[0].value())    
+    def gradients(self, node, outGrad):
+        assert outGrad.shape == node.inputs[0].shape
+        x = node.inputs[0]
+        sign = xp.sign(x.value())
+        dx = outGrad * Tensor(sign)
+        return dx
     
 #################################################
 # Tensor Tuples
@@ -1054,6 +1062,8 @@ def where(mask, a, b):
     return TensorWhere(mask).tensor(a, b)
 def bitwise_or(a, b):
     return TensorBitwiseOr().tensor(a, b)
+def abs(a):
+    return TensorAbsolute().tensor(a)
 
 def reshape(a, shape):
     return TensorReshape(shape).tensor(a)
